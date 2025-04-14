@@ -1,5 +1,5 @@
 // Importa le dipendenze
-const { WebSocketServer } = require('ws');
+const { WebSocketServer, WebSocket } = require('ws');
 const { createClient } = require('@supabase/supabase-js');
 const msgpack = require('@msgpack/msgpack');
 const http = require('http');
@@ -141,7 +141,7 @@ function broadcastToAll(message, excludeIds = []) {
     const encodedMessage = msgpack.encode(message);
     
     wss.clients.forEach((client) => {
-        if (client.readyState === ws.OPEN) {
+        if (client.readyState === WebSocket.OPEN) {
             client.send(encodedMessage);
         }
     });
