@@ -79,26 +79,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Funzione per inizializzare PixiJS
 function initPixiJS() {
-    // Inizializza PixiJS
-    app = new PIXI.Application({
-        width: 1280,
-        height: 720,
-        backgroundColor: 0x0a0a0a,
-        resolution: window.devicePixelRatio || 1,
-        antialias: true
-    });
+    // Verifica che PIXI sia disponibile
+    if (!window.PIXI) {
+        console.error("PIXI.js non è stato caricato correttamente");
+        return;
+    }
     
-    // Ora siamo sicuri che il container esiste ed è visibile
-    document.getElementById('game-container').appendChild(app.view);
-    
-    // Configura il ticker di gioco
-    app.ticker.add((delta) => {
-        updateMovement(delta);
-        interpolateOtherPlayers();
-        checkEnergyCollection();
-        checkPlayerCollisions();
-        updateHUD();
-    });
+    try {
+        // Inizializza PixiJS
+        app = new PIXI.Application({
+            width: window.innerWidth - 20, // Usa quasi tutta la larghezza della finestra
+            height: window.innerHeight - 20, // Usa quasi tutta l'altezza della finestra
+            backgroundColor: 0x0a0a0a,
+            resolution: window.devicePixelRatio || 1,
+            antialias: true
+        });
+        
+        // Aggiungi stile al canvas per supportare meglio i diversi schermi
+        app.renderer.view.style.display = "block";
+        app.renderer.view.style.margin = "0 auto";
+        
+        // Ora siamo sicuri che il container esiste ed è visibile
+        const container = document.getElementById('game-container');
+        if (!container) {
+            console.error("Elemento game-container non trovato");
+            return;
+        }
+        
+        container.appendChild(app.view);
+        
+        // Aggiungi resize handler per adattarsi alle dimensioni dello schermo
+        window.addEventListener('resize', () => {
+            if (app && app.renderer) {
+                app.renderer.resize(window.innerWidth - 20, window.innerHeight - 20);
+            }
+        });
+        
+        // Configura il ticker di gioco
+        app.ticker.add((delta) => {
+            updateMovement(delta);
+            interpolateOtherPlayers();
+            checkEnergyCollection();
+            checkPlayerCollisions();
+            updateHUD();
+        });
+        
+        console.log("PixiJS inizializzato con successo");
+    } catch (error) {
+        console.error("Errore durante l'inizializzazione di PixiJS:", error);
+    }
 }
 
 // Funzione di inizializzazione del gioco

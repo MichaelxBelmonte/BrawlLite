@@ -4,30 +4,31 @@
     box-sizing: border-box;
 }
 
-body {
+body, html {
     margin: 0;
     padding: 0;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
-    cursor: none;
+    height: 100%;
+    width: 100%;
     overflow: hidden;
-    font-family: 'Arial', sans-serif;
+    font-family: Arial, sans-serif;
+    background-color: #000;
+    color: #fff;
+    cursor: default !important;
 }
 
 #game-container {
-    width: 1280px;
-    height: 720px;
-    max-width: 100%;
-    max-height: 100%;
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    cursor: default !important;
 }
 
-canvas {
+#game-container canvas {
     display: block;
+    cursor: default !important;
     border: 2px solid #00ff88;
     box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
 }
@@ -54,36 +55,63 @@ canvas {
     margin-bottom: 0;
 }
 
-/* Classifica */
-#leaderboard {
+/* Stili ottimizzati per il leaderboard */
+#leaderboard-container {
     position: absolute;
     top: 10px;
     right: 10px;
-    color: #ffffff;
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 10px;
-    border-radius: 5px;
-    border: 1px solid rgba(0, 255, 136, 0.3);
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
     min-width: 200px;
+    z-index: 10;
 }
 
-.leaderboard-title {
-    text-align: center;
+#leaderboard-container h3 {
+    margin-top: 0;
     margin-bottom: 10px;
-    font-weight: bold;
     color: #00ff88;
-    text-shadow: 0 0 5px rgba(0, 255, 136, 0.5);
+    font-size: 1.2em;
+    text-align: center;
+    text-transform: uppercase;
 }
 
 .leaderboard-item {
-    margin: 5px 0;
-    padding: 3px 5px;
-    border-radius: 3px;
+    padding: 5px 0;
+    font-size: 1em;
+    color: #ffffff;
 }
 
-.leaderboard-item.local-player {
-    background-color: rgba(0, 255, 136, 0.2);
+.local-player {
     color: #00ff88;
+    font-weight: bold;
+}
+
+/* Stili ottimizzati per informazioni del giocatore */
+#player-info {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+    min-width: 180px;
+    z-index: 10;
+}
+
+.player-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.player-stats div {
+    font-size: 1em;
+    color: #ffffff;
 }
 
 /* Istruzioni */
@@ -117,85 +145,81 @@ canvas {
 /* Messaggio di inizio gioco */
 #start-message {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     background-color: rgba(0, 0, 0, 0.8);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-    color: white;
+    padding: 30px;
+    border-radius: 15px;
     text-align: center;
-    transition: opacity 0.5s;
+    z-index: 100;
+    max-width: 80%;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+    border: 3px solid #00ff88;
+    transition: opacity 0.5s ease;
 }
 
 #start-message h2 {
-    font-size: 36px;
-    margin-bottom: 20px;
     color: #00ff88;
-    text-shadow: 0 0 10px rgba(0, 255, 136, 0.7);
+    font-size: 36px;
+    margin-top: 0;
+    margin-bottom: 20px;
+    text-transform: uppercase;
 }
 
 #start-message p {
+    color: white;
     font-size: 18px;
-    margin-bottom: 40px;
-    line-height: 1.6;
+    margin-bottom: 30px;
+    line-height: 1.5;
 }
 
 .start-button {
+    display: inline-block;
     background-color: #00ff88;
-    color: #000;
-    padding: 12px 30px;
-    font-size: 18px;
+    color: black;
+    font-weight: bold;
+    padding: 15px 30px;
     border-radius: 30px;
     cursor: pointer;
-    transition: all 0.3s;
-    border: none;
-    font-weight: bold;
-    box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+    transition: all 0.2s ease;
+    font-size: 20px;
+    text-transform: uppercase;
 }
 
 .start-button:hover {
-    background-color: #fff;
+    background-color: white;
     transform: scale(1.05);
-    box-shadow: 0 0 30px rgba(0, 255, 136, 0.7);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
 }
 
 /* Messaggi in-game */
 .game-message {
     position: fixed;
-    bottom: 150px;
+    top: 100px;
     left: 50%;
     transform: translateX(-50%);
-    padding: 8px 16px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
     border-radius: 5px;
-    font-size: 16px;
-    font-weight: bold;
+    z-index: 1000;
+    font-size: 18px;
     text-align: center;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-    z-index: 50;
-    pointer-events: none;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
 }
 
 .game-message.info {
-    background-color: rgba(0, 0, 0, 0.7);
-    color: #00ff88;
-    border: 1px solid #00ff88;
+    border: 2px solid #3498db;
 }
 
 .game-message.warning {
-    background-color: rgba(255, 100, 0, 0.7);
-    color: white;
-    border: 1px solid #ff8c00;
+    border: 2px solid #f39c12;
 }
 
 .game-message.ability {
-    background-color: rgba(0, 50, 255, 0.7);
-    color: white;
-    border: 1px solid #00a2ff;
+    border: 2px solid #00ff88;
+    color: #00ff88;
 }
 
 /* Level up message */
@@ -204,39 +228,38 @@ canvas {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: rgba(0, 0, 0, 0.8);
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid gold;
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-    color: white;
+    background-color: rgba(0, 0, 0, 0.9);
+    padding: 25px;
+    border-radius: 15px;
     text-align: center;
-    z-index: 100;
-    pointer-events: none;
+    z-index: 110;
+    min-width: 300px;
+    border: 3px solid gold;
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.6);
 }
 
 .level-title {
-    font-size: 24px;
     color: gold;
-    margin-bottom: 10px;
-    text-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+    font-size: 28px;
+    margin-bottom: 15px;
+    text-transform: uppercase;
 }
 
 .level-rank {
-    font-size: 20px;
     color: white;
+    font-size: 24px;
     margin-bottom: 15px;
 }
 
 .level-ability {
-    font-size: 16px;
-    color: #00ffff;
-    margin-bottom: 5px;
+    color: #00ff88;
+    font-size: 18px;
+    margin-bottom: 10px;
 }
 
 .level-key {
-    font-size: 14px;
-    color: #aaaaaa;
+    color: #ff9900;
+    font-size: 16px;
 }
 
 /* Tooltip per spiegare le abilità */
@@ -280,100 +303,53 @@ canvas {
     color: #aaa;
 }
 
-/* Contenitore delle abilità */
+/* Stili ottimizzati per abilità */
 #abilities-container {
     position: absolute;
-    bottom: 80px;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 15px;
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px 20px;
     border-radius: 10px;
-    border: 1px solid rgba(0, 255, 136, 0.3);
+    border: 2px solid #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+    z-index: 10;
 }
 
 .ability-slot {
-    width: 80px;
-    height: 80px;
+    position: relative;
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 2px solid #00ff88;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background-color: rgba(20, 20, 20, 0.7);
-    border: 1px solid rgba(100, 100, 100, 0.5);
-    border-radius: 8px;
-    padding: 5px;
-    transition: all 0.3s;
-    position: relative;
-}
-
-.ability-slot.unlocked {
-    border-color: rgba(0, 255, 136, 0.5);
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-}
-
-.ability-slot.active {
-    background-color: rgba(0, 100, 50, 0.7);
-    border-color: #00ff88;
-    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
-}
-
-.ability-slot.cooldown {
-    background-color: rgba(50, 50, 50, 0.7);
+    cursor: pointer;
+    overflow: hidden;
 }
 
 .ability-icon {
-    width: 40px;
-    height: 40px;
-    background-color: rgba(80, 80, 80, 0.7);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #aaa;
-    font-weight: bold;
+    font-size: 24px;
+    color: #00ff88;
     margin-bottom: 5px;
-    transition: all 0.3s;
-}
-
-.ability-slot.unlocked .ability-icon {
-    background-color: rgba(0, 255, 136, 0.3);
-    color: white;
-}
-
-.ability-slot.active .ability-icon {
-    background-color: rgba(0, 255, 136, 0.8);
-    box-shadow: 0 0 10px #00ff88;
 }
 
 .ability-name {
     font-size: 10px;
-    color: #aaa;
-    text-align: center;
-    white-space: nowrap;
-}
-
-.ability-slot.unlocked .ability-name {
     color: white;
+    text-align: center;
 }
 
 .ability-status {
-    font-size: 8px;
-    color: #888;
-    position: absolute;
-    bottom: 3px;
-    width: 100%;
+    font-size: 10px;
+    color: #ff6666;
     text-align: center;
-}
-
-.ability-slot.unlocked .ability-status {
-    color: #00ff88;
-}
-
-.ability-slot.cooldown .ability-status {
-    color: orange;
 }
 
 .cooldown-overlay {
@@ -381,8 +357,81 @@ canvas {
     bottom: 0;
     left: 0;
     width: 100%;
-    background-color: rgba(255, 165, 0, 0.4);
-    border-bottom-left-radius: 7px;
-    border-bottom-right-radius: 7px;
-    transition: height 0.1s linear;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1;
+}
+
+/* Login screen */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+#login-screen h1 {
+    color: #00ff88;
+    font-size: 50px;
+    margin-bottom: 30px;
+    text-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
+    text-transform: uppercase;
+}
+
+.login-container {
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 30px;
+    border-radius: 15px;
+    border: 3px solid #00ff88;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 350px;
+}
+
+#username-input {
+    width: 100%;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: none;
+    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 18px;
+    text-align: center;
+    outline: none;
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+#username-input:focus {
+    border-color: #00ff88;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+#start-button {
+    background-color: #00ff88;
+    color: black;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 30px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    width: 100%;
+}
+
+#start-button:hover {
+    background-color: white;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
 } 
