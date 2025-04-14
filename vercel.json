@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "frontend/public/**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/frontend/public/$1" }
+  ],
+  "env": {
+    "VITE_SUPABASE_URL": "@supabase_url",
+    "VITE_SUPABASE_KEY": "@supabase_key",
+    "VITE_WS_URL": "@render_ws_url"
+  }
+} 
