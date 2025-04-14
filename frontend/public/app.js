@@ -7,8 +7,8 @@ const app = new PIXI.Application({
 });
 document.getElementById('game-container').appendChild(app.view);
 
-// Import msgpack dal namespace globale
-const msgpack = window.msgpack;
+// Inizializzazione msgpack
+const msgpack = window.msgpack5();
 
 // Funzione per ottenere variabili d'ambiente
 function getEnvVar(name, defaultValue) {
