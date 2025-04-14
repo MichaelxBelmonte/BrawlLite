@@ -3,8 +3,6 @@ const { WebSocketServer, WebSocket } = require('ws');
 const { createClient } = require('@supabase/supabase-js');
 const msgpack = require('@msgpack/msgpack');
 const http = require('http');
-const https = require('https');  // Aggiungi supporto HTTPS
-const fs = require('fs');        // Per leggere i certificati
 const dotenv = require('dotenv');
 const path = require('path');
 
@@ -12,7 +10,7 @@ const path = require('path');
 dotenv.config();
 
 // Configurazione
-const PORT = process.env.PORT || 10800; // Allinea alla variabile d'ambiente Render
+const PORT = process.env.PORT || 3000; // Usa la porta standard di Render
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const SYNC_INTERVAL = 500; // ms
@@ -26,35 +24,17 @@ const gameState = {
 // Inizializza Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Crea il server HTTP/HTTPS
-let server;
-try {
-    // Tenta di creare un server HTTPS se i certificati sono disponibili
-    if (process.env.RENDER_SSL_CERT_PATH && process.env.RENDER_SSL_KEY_PATH) {
-        server = https.createServer({
-            cert: fs.readFileSync(process.env.RENDER_SSL_CERT_PATH),
-            key: fs.readFileSync(process.env.RENDER_SSL_KEY_PATH)
-        });
-        console.log('Server HTTPS configurato con successo');
-    } else {
-        // Fallback su HTTP se non ci sono certificati
-        server = http.createServer();
-        console.log('Server HTTP configurato (nessun certificato SSL trovato)');
-    }
-} catch (error) {
-    console.error('Errore nella configurazione SSL:', error);
-    // Fallback su HTTP in caso di errore
-    server = http.createServer();
-}
+// Crea il server HTTP (SSL gestito da Render)
+const server = http.createServer();
+
+// Crea il server WebSocket
+const wss = new WebSocketServer({ server });
 
 // Configura risposta base per HTTP
 server.on('request', (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Brawl Legends WebSocket Server');
 });
-
-// Crea il server WebSocket
-const wss = new WebSocketServer({ server });
 
 // Gestione delle connessioni WebSocket
 wss.on('connection', (ws) => {
@@ -227,7 +207,7 @@ async function syncWithSupabase() {
 
 // Avvia il server
 server.listen(PORT, () => {
-    console.log(`Server WebSocket in ascolto sulla porta ${PORT}`);
+    console.log(`🚀 Server WebSocket in ascolto sulla porta ${PORT} (SSL gestito da Render)`);
     
     // Avvia sincronizzazione con Supabase
     syncWithSupabase();
