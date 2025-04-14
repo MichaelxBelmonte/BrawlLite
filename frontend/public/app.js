@@ -58,10 +58,6 @@ function createPlayerSprite(playerId, isLocalPlayer = false) {
     return sprite;
 }
 
-// Inizializza giocatore locale
-const localPlayer = createPlayerSprite(gameState.playerId, true);
-gameState.players.set(gameState.playerId, localPlayer);
-
 // Imposta input da tastiera
 window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() in gameState.keys) {
@@ -78,6 +74,10 @@ window.addEventListener('keyup', (e) => {
 // Movimento WASD con predizione lato client
 function updateMovement(delta) {
     const player = gameState.players.get(gameState.playerId);
+    
+    // Verifica che il player esista prima di accedere alle sue proprietà
+    if (!player) return;
+    
     const prevX = player.x;
     const prevY = player.y;
     
@@ -120,14 +120,14 @@ function updateMovement(delta) {
 // Funzione per interpolare il movimento di altri giocatori
 function interpolateOtherPlayers() {
     gameState.players.forEach((sprite, id) => {
-        if (id !== gameState.playerId && sprite.targetX !== undefined) {
+        if (id !== gameState.playerId && sprite && sprite.targetX !== undefined) {
             sprite.x += (sprite.targetX - sprite.x) * INTERPOLATION_FACTOR;
             sprite.y += (sprite.targetY - sprite.y) * INTERPOLATION_FACTOR;
         }
     });
 }
 
-// Loop di gioco principale
+// Configura il ticker di gioco prima di inizializzare la connessione
 app.ticker.add((delta) => {
     updateMovement(delta);
     interpolateOtherPlayers();
@@ -145,7 +145,16 @@ function connectWebSocket() {
     
     socket.onopen = () => {
         console.log('Connessione WebSocket stabilita');
+        
+        // Assicurati che il giocatore locale sia inizializzato
+        if (!gameState.players.has(gameState.playerId)) {
+            const localPlayer = createPlayerSprite(gameState.playerId, true);
+            gameState.players.set(gameState.playerId, localPlayer);
+            gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+        }
+        
         // Invia il primo messaggio di join con posizione iniziale
+        const localPlayer = gameState.players.get(gameState.playerId);
         socket.send(msgpack.encode({
             type: 'join',
             id: gameState.playerId,
