@@ -56,15 +56,8 @@ const gameState = {
 
 // Inizializza il gioco quando il DOM è completamente caricato
 document.addEventListener('DOMContentLoaded', () => {
-    // Inizializza PixiJS
-    app = new PIXI.Application({
-        width: 1280,
-        height: 720,
-        backgroundColor: 0x0a0a0a,
-        resolution: window.devicePixelRatio || 1,
-        antialias: true
-    });
-    document.getElementById('game-container').appendChild(app.view);
+    // Inizializza PixiJS solo quando necessario durante l'avvio del gioco
+    // Non creare ancora app, ma prepariamo la funzione da chiamare
     
     // Inizializzazione del gioco quando l'utente inserisce il nome
     document.getElementById('start-button').addEventListener('click', () => {
@@ -75,10 +68,28 @@ document.addEventListener('DOMContentLoaded', () => {
             // Mostra il contenitore di gioco
             document.getElementById('game-container').style.display = 'block';
             
+            // Inizializza PixiJS qui, quando game-container è visibile
+            initPixiJS();
+            
             // Inizializza il gioco
             initGame(username);
         }
     });
+});
+
+// Funzione per inizializzare PixiJS
+function initPixiJS() {
+    // Inizializza PixiJS
+    app = new PIXI.Application({
+        width: 1280,
+        height: 720,
+        backgroundColor: 0x0a0a0a,
+        resolution: window.devicePixelRatio || 1,
+        antialias: true
+    });
+    
+    // Ora siamo sicuri che il container esiste ed è visibile
+    document.getElementById('game-container').appendChild(app.view);
     
     // Configura il ticker di gioco
     app.ticker.add((delta) => {
@@ -88,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         checkPlayerCollisions();
         updateHUD();
     });
-});
+}
 
 // Funzione di inizializzazione del gioco
 function initGame(username) {
@@ -111,6 +122,26 @@ function initGame(username) {
     
     // Inizializza i punti energia
     initEnergyPoints();
+    
+    // Aggiungi il messaggio di istruzioni
+    const startMessage = document.createElement('div');
+    startMessage.id = 'start-message';
+    startMessage.innerHTML = `
+        <h2>Brawl Legends</h2>
+        <p>Raccogli i punti energia gialli per crescere<br>
+        Diventa abbastanza grande per mangiare gli altri giocatori!</p>
+        <div class="start-button">Inizia a Giocare</div>
+    `;
+    document.body.appendChild(startMessage);
+    
+    // Aggiungi evento click al pulsante
+    const startButton = startMessage.querySelector('.start-button');
+    startButton.addEventListener('click', () => {
+        startMessage.style.opacity = '0';
+        setTimeout(() => {
+            startMessage.remove();
+        }, 500);
+    });
 }
 
 // Funzione per creare uno sprite giocatore
@@ -517,31 +548,6 @@ if (typeof gsap === 'undefined') {
     };
     document.head.appendChild(script);
 }
-
-// Avvia il gioco quando tutto è pronto
-window.addEventListener('load', () => {
-    console.log('Gioco inizializzato...');
-    
-    // Aggiungi il messaggio iniziale
-    const startMessage = document.createElement('div');
-    startMessage.id = 'start-message';
-    startMessage.innerHTML = `
-        <h2>Brawl Legends</h2>
-        <p>Raccogli i punti energia gialli per crescere<br>
-        Diventa abbastanza grande per mangiare gli altri giocatori!</p>
-        <div class="start-button">Inizia a Giocare</div>
-    `;
-    document.body.appendChild(startMessage);
-    
-    // Aggiungi evento click al pulsante
-    const startButton = startMessage.querySelector('.start-button');
-    startButton.addEventListener('click', () => {
-        startMessage.style.opacity = '0';
-        setTimeout(() => {
-            startMessage.remove();
-        }, 500);
-    });
-});
 
 // Effetto visivo di level up
 function createLevelUpEffect(x, y, level) {
