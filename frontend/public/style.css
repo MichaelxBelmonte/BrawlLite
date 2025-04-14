@@ -162,4 +162,227 @@ canvas {
     background-color: #fff;
     transform: scale(1.05);
     box-shadow: 0 0 30px rgba(0, 255, 136, 0.7);
+}
+
+/* Messaggi in-game */
+.game-message {
+    position: fixed;
+    bottom: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    z-index: 50;
+    pointer-events: none;
+}
+
+.game-message.info {
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #00ff88;
+    border: 1px solid #00ff88;
+}
+
+.game-message.warning {
+    background-color: rgba(255, 100, 0, 0.7);
+    color: white;
+    border: 1px solid #ff8c00;
+}
+
+.game-message.ability {
+    background-color: rgba(0, 50, 255, 0.7);
+    color: white;
+    border: 1px solid #00a2ff;
+}
+
+/* Level up message */
+.level-up-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid gold;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    color: white;
+    text-align: center;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.level-title {
+    font-size: 24px;
+    color: gold;
+    margin-bottom: 10px;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+}
+
+.level-rank {
+    font-size: 20px;
+    color: white;
+    margin-bottom: 15px;
+}
+
+.level-ability {
+    font-size: 16px;
+    color: #00ffff;
+    margin-bottom: 5px;
+}
+
+.level-key {
+    font-size: 14px;
+    color: #aaaaaa;
+}
+
+/* Tooltip per spiegare le abilità */
+.ability-tooltip {
+    position: absolute;
+    bottom: 60px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border: 1px solid #00ff88;
+    border-radius: 5px;
+    padding: 10px;
+    color: white;
+    font-size: 14px;
+    width: 250px;
+    pointer-events: none;
+    z-index: 50;
+}
+
+.ability-icon {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    margin-right: 10px;
+    background-color: rgba(0, 255, 136, 0.3);
+    border: 1px solid rgba(0, 255, 136, 0.7);
+    text-align: center;
+    line-height: 30px;
+    font-weight: bold;
+    transition: all 0.3s;
+}
+
+.ability-icon.active {
+    background-color: rgba(0, 255, 136, 0.8);
+    box-shadow: 0 0 10px #00ff88;
+}
+
+.ability-icon.cooldown {
+    background-color: rgba(100, 100, 100, 0.5);
+    border-color: rgba(150, 150, 150, 0.7);
+    color: #aaa;
+}
+
+/* Contenitore delle abilità */
+#abilities-container {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.ability-slot {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(20, 20, 20, 0.7);
+    border: 1px solid rgba(100, 100, 100, 0.5);
+    border-radius: 8px;
+    padding: 5px;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.ability-slot.unlocked {
+    border-color: rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.ability-slot.active {
+    background-color: rgba(0, 100, 50, 0.7);
+    border-color: #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+}
+
+.ability-slot.cooldown {
+    background-color: rgba(50, 50, 50, 0.7);
+}
+
+.ability-icon {
+    width: 40px;
+    height: 40px;
+    background-color: rgba(80, 80, 80, 0.7);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-weight: bold;
+    margin-bottom: 5px;
+    transition: all 0.3s;
+}
+
+.ability-slot.unlocked .ability-icon {
+    background-color: rgba(0, 255, 136, 0.3);
+    color: white;
+}
+
+.ability-slot.active .ability-icon {
+    background-color: rgba(0, 255, 136, 0.8);
+    box-shadow: 0 0 10px #00ff88;
+}
+
+.ability-name {
+    font-size: 10px;
+    color: #aaa;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.ability-slot.unlocked .ability-name {
+    color: white;
+}
+
+.ability-status {
+    font-size: 8px;
+    color: #888;
+    position: absolute;
+    bottom: 3px;
+    width: 100%;
+    text-align: center;
+}
+
+.ability-slot.unlocked .ability-status {
+    color: #00ff88;
+}
+
+.ability-slot.cooldown .ability-status {
+    color: orange;
+}
+
+.cooldown-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: rgba(255, 165, 0, 0.4);
+    border-bottom-left-radius: 7px;
+    border-bottom-right-radius: 7px;
+    transition: height 0.1s linear;
 } 

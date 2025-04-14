@@ -28,7 +28,13 @@ const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.co
 const MAX_ENERGY_POINTS = 30;  // Numero massimo di punti energia sulla mappa
 const ENERGY_VALUE = 5;        // Valore di ogni punto energia
 const INITIAL_SIZE = 20;       // Dimensione iniziale dei giocatori
-const MAX_SIZE = 100;          // Dimensione massima raggiungibile
+const MAX_SIZE = 50;           // Dimensione massima raggiungibile (ridotta da 100)
+const LEVEL_THRESHOLDS = [     // Soglie per livelli di evoluzione
+    { level: 1, size: INITIAL_SIZE, name: "Novizio" },
+    { level: 2, size: 30, name: "Guerriero", ability: "speed" },
+    { level: 3, size: 40, name: "Campione", ability: "shield" },
+    { level: 4, size: MAX_SIZE, name: "Leggenda", ability: "attack" }
+];
 
 // Stato del gioco
 const gameState = {
@@ -36,6 +42,18 @@ const gameState = {
     players: new Map(),
     energyPoints: new Map(),  // Punti energia sulla mappa
     scores: new Map(),        // Punteggi dei giocatori
+    abilities: {
+        cooldowns: {
+            speed: 0,
+            shield: 0,
+            attack: 0
+        },
+        active: {
+            speed: false,
+            shield: false
+        }
+    },
+    level: 1,
     keys: {
         w: false,
         a: false,
@@ -43,7 +61,8 @@ const gameState = {
         d: false
     },
     lastUpdate: Date.now(),
-    lastPosition: { x: 0, y: 0 }
+    lastPosition: { x: 0, y: 0 },
+    projectiles: []
 };
 
 // Funzione per creare uno sprite giocatore
@@ -123,11 +142,17 @@ function updateMovement(delta) {
     const prevX = player.x;
     const prevY = player.y;
     
+    // Calcola la velocità base (modificata se speed boost è attivo)
+    let speed = PLAYER_SPEED;
+    if (gameState.abilities.active.speed) {
+        speed = PLAYER_SPEED * 2; // Raddoppia la velocità con lo speed boost
+    }
+    
     // Applica movimento in base ai tasti premuti
-    if (gameState.keys.w) player.y -= PLAYER_SPEED * delta;
-    if (gameState.keys.a) player.x -= PLAYER_SPEED * delta;
-    if (gameState.keys.s) player.y += PLAYER_SPEED * delta;
-    if (gameState.keys.d) player.x += PLAYER_SPEED * delta;
+    if (gameState.keys.w) player.y -= speed * delta;
+    if (gameState.keys.a) player.x -= speed * delta;
+    if (gameState.keys.s) player.y += speed * delta;
+    if (gameState.keys.d) player.x += speed * delta;
     
     // Limita movimento all'interno dello schermo
     player.x = Math.max(20, Math.min(app.screen.width - 20, player.x));
@@ -346,6 +371,9 @@ function collectEnergy(player, energyPoint, energyId) {
     const newSize = Math.min(player.size + 1, MAX_SIZE);
     updatePlayerSize(player, newSize);
     
+    // Controlla se il giocatore è salito di livello
+    checkLevelUp(player);
+    
     // Rimuovi il punto energia
     app.stage.removeChild(energyPoint);
     gameState.energyPoints.delete(energyId);
@@ -359,9 +387,196 @@ function collectEnergy(player, energyPoint, energyId) {
             type: 'score',
             id: gameState.playerId,
             score: player.score,
-            size: player.size
+            size: player.size,
+            level: gameState.level
         }));
     }
+}
+
+// Controlla se il giocatore è salito di livello
+function checkLevelUp(player) {
+    // Trova il livello corrispondente alla dimensione attuale
+    let newLevel = 1;
+    for (const threshold of LEVEL_THRESHOLDS) {
+        if (player.size >= threshold.size) {
+            newLevel = threshold.level;
+        } else {
+            break;
+        }
+    }
+    
+    // Se è salito di livello
+    if (newLevel > gameState.level) {
+        const oldLevel = gameState.level;
+        gameState.level = newLevel;
+        
+        // Trova informazioni sul nuovo livello
+        const levelInfo = LEVEL_THRESHOLDS.find(t => t.level === newLevel);
+        
+        // Mostra messaggio di level up
+        showLevelUpMessage(levelInfo.name, levelInfo.ability);
+        
+        // Sblocca nuove abilità
+        if (levelInfo.ability) {
+            unlockAbility(levelInfo.ability);
+        }
+        
+        // Aggiorna visivamente il giocatore
+        updatePlayerAppearance(player, oldLevel, newLevel);
+    }
+}
+
+// Mostra un messaggio di level up
+function showLevelUpMessage(rank, ability) {
+    const message = document.createElement('div');
+    message.className = 'level-up-message';
+    message.innerHTML = `
+        <div class="level-title">Livello Aumentato!</div>
+        <div class="level-rank">Sei diventato: ${rank}</div>
+        ${ability ? `<div class="level-ability">Nuova abilità: ${getAbilityName(ability)}</div>` : ''}
+        ${ability ? `<div class="level-key">Premi [${getAbilityKey(ability)}] per usarla</div>` : ''}
+    `;
+    
+    document.body.appendChild(message);
+    
+    // Animazione di comparsa e scomparsa
+    gsap.fromTo(message, 
+        { y: -50, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: "back.out" }
+    );
+    
+    setTimeout(() => {
+        gsap.to(message, {
+            y: 50, opacity: 0, duration: 0.5, ease: "back.in",
+            onComplete: () => message.remove()
+        });
+    }, 3000);
+}
+
+// Sblocca una nuova abilità
+function unlockAbility(ability) {
+    // Aggiunge l'event listener per il tasto corrispondente
+    if (!window[`${ability}KeyHandler`]) {
+        window[`${ability}KeyHandler`] = true;
+        
+        window.addEventListener('keydown', (e) => {
+            const key = getAbilityKey(ability);
+            if (e.key.toLowerCase() === key && gameState.level >= getAbilityMinLevel(ability)) {
+                activateAbility(ability);
+            }
+        });
+    }
+}
+
+// Restituisce il nome dell'abilità
+function getAbilityName(ability) {
+    switch(ability) {
+        case 'speed': return 'Scatto Turbo';
+        case 'shield': return 'Scudo Energetico';
+        case 'attack': return 'Raggio Letale';
+        default: return ability;
+    }
+}
+
+// Restituisce il tasto per attivare l'abilità
+function getAbilityKey(ability) {
+    switch(ability) {
+        case 'speed': return 'q';
+        case 'shield': return 'e';
+        case 'attack': return 'spazio';
+        default: return '?';
+    }
+}
+
+// Restituisce il livello minimo per l'abilità
+function getAbilityMinLevel(ability) {
+    const threshold = LEVEL_THRESHOLDS.find(t => t.ability === ability);
+    return threshold ? threshold.level : 999;
+}
+
+// Aggiorna l'aspetto del giocatore in base al livello
+function updatePlayerAppearance(player, oldLevel, newLevel) {
+    // Rimuove vecchi elementi visivi
+    while (player.children.length > 3) { // Mantiene corpo, glow e nome
+        player.removeChildAt(3);
+    }
+    
+    // Aggiunge elementi visivi in base al livello
+    if (newLevel >= 2) {
+        // Livello 2: Aura speciale
+        const aura = new PIXI.Graphics();
+        aura.beginFill(0x00ffff, 0.2);
+        aura.drawCircle(0, 0, player.size + 15);
+        aura.endFill();
+        player.addChildAt(aura, 0); // Sotto a tutto
+        
+        // Animazione pulsante
+        gsap.to(aura, {
+            alpha: 0.4,
+            duration: 1,
+            yoyo: true,
+            repeat: -1
+        });
+    }
+    
+    if (newLevel >= 3) {
+        // Livello 3: Particelle orbitanti
+        for (let i = 0; i < 3; i++) {
+            const orbit = Math.random() * 20 + player.size + 5;
+            const particle = new PIXI.Graphics();
+            particle.beginFill(0xffff00);
+            particle.drawCircle(0, 0, 3);
+            particle.endFill();
+            particle.x = orbit;
+            particle.y = 0;
+            player.addChild(particle);
+            
+            // Orbita attorno al giocatore
+            gsap.to(particle, {
+                duration: Math.random() * 3 + 2,
+                repeat: -1,
+                ease: "none",
+                onUpdate: function() {
+                    const angle = this.progress() * Math.PI * 2 + (i * Math.PI * 2 / 3);
+                    particle.x = Math.cos(angle) * orbit;
+                    particle.y = Math.sin(angle) * orbit;
+                }
+            });
+        }
+    }
+    
+    if (newLevel >= 4) {
+        // Livello 4: Corona/effetto speciale
+        const crown = new PIXI.Graphics();
+        crown.beginFill(0xffd700);
+        
+        // Disegna una corona stilizzata
+        crown.moveTo(-15, -player.size - 10);
+        crown.lineTo(-10, -player.size - 20);
+        crown.lineTo(-5, -player.size - 10);
+        crown.lineTo(0, -player.size - 20);
+        crown.lineTo(5, -player.size - 10);
+        crown.lineTo(10, -player.size - 20);
+        crown.lineTo(15, -player.size - 10);
+        crown.lineTo(15, -player.size - 5);
+        crown.lineTo(-15, -player.size - 5);
+        crown.closePath();
+        
+        crown.endFill();
+        player.addChild(crown);
+    }
+    
+    // Animazione di level up
+    gsap.to(player.scale, {
+        x: player.scale.x * 1.2,
+        y: player.scale.y * 1.2,
+        duration: 0.3,
+        yoyo: true,
+        repeat: 1
+    });
+    
+    // Effetto particellare di level up
+    createLevelUpEffect(player.x, player.y, newLevel);
 }
 
 // Aggiorna la dimensione di un giocatore
@@ -697,4 +912,467 @@ window.addEventListener('load', () => {
             startMessage.remove();
         }, 500);
     });
-}); 
+});
+
+// Effetto visivo di level up
+function createLevelUpEffect(x, y, level) {
+    // Crea particelle colorate in base al livello
+    const colors = [0xffffff, 0x00ffff, 0xffff00, 0xffd700];
+    const color = colors[level - 1] || 0xffffff;
+    
+    for (let i = 0; i < 30; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(color);
+        particle.drawCircle(0, 0, Math.random() * 4 + 2);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        app.stage.addChild(particle);
+        
+        // Animazione esplosiva
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 150 + 50;
+        const duration = Math.random() * 1 + 0.5;
+        
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration,
+            ease: "power2.out",
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+    
+    // Onda d'urto
+    const shockwave = new PIXI.Graphics();
+    shockwave.lineStyle(2, color, 1);
+    shockwave.drawCircle(0, 0, 10);
+    shockwave.x = x;
+    shockwave.y = y;
+    app.stage.addChild(shockwave);
+    
+    gsap.to(shockwave, {
+        pixi: { scale: 10 },
+        alpha: 0,
+        duration: 1,
+        ease: "power2.out",
+        onComplete: () => {
+            app.stage.removeChild(shockwave);
+        }
+    });
+}
+
+// Attiva un'abilità speciale
+function activateAbility(ability) {
+    const now = Date.now();
+    const cooldown = gameState.abilities.cooldowns[ability] || 0;
+    
+    // Controlla se l'abilità è in cooldown
+    if (now < cooldown) {
+        const remainingSeconds = Math.ceil((cooldown - now) / 1000);
+        showMessage(`${getAbilityName(ability)} in ricarica (${remainingSeconds}s)`, 'warning');
+        return;
+    }
+    
+    // Esegue l'abilità in base al tipo
+    switch(ability) {
+        case 'speed':
+            activateSpeedBoost();
+            break;
+        case 'shield':
+            activateShield();
+            break;
+        case 'attack':
+            fireAttack();
+            break;
+    }
+}
+
+// Abilità: Boost di velocità
+function activateSpeedBoost() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    // Durata e cooldown
+    const duration = 3000; // 3 secondi
+    const cooldownTime = 10000; // 10 secondi
+    
+    // Imposta il cooldown
+    gameState.abilities.cooldowns.speed = Date.now() + cooldownTime;
+    gameState.abilities.active.speed = true;
+    
+    // Mostra messaggio
+    showMessage('Scatto Turbo attivato!', 'ability');
+    
+    // Crea effetto visivo
+    const trail = createSpeedEffect(player);
+    
+    // Termina dopo la durata
+    setTimeout(() => {
+        gameState.abilities.active.speed = false;
+        showMessage('Scatto Turbo terminato', 'info');
+        
+        // Rimuovi effetto visivo
+        if (trail && trail.parent) {
+            app.stage.removeChild(trail);
+        }
+    }, duration);
+}
+
+// Crea effetto visivo per il boost di velocità
+function createSpeedEffect(player) {
+    const trail = new PIXI.Graphics();
+    app.stage.addChildAt(trail, 0); // Sotto il player
+    
+    // Aggiungi al ticker per aggiornare la scia
+    const trailPoints = [];
+    const trailLength = 20;
+    
+    const trailTicker = app.ticker.add(() => {
+        // Aggiorna punti della scia
+        trailPoints.unshift({ x: player.x, y: player.y });
+        
+        // Limita lunghezza
+        if (trailPoints.length > trailLength) {
+            trailPoints.pop();
+        }
+        
+        // Disegna la scia
+        trail.clear();
+        
+        for (let i = 0; i < trailPoints.length - 1; i++) {
+            const alpha = 1 - (i / trailLength);
+            const width = (trailLength - i) * 0.5;
+            
+            trail.lineStyle(width, 0x00ffff, alpha * 0.7);
+            trail.moveTo(trailPoints[i].x, trailPoints[i].y);
+            trail.lineTo(trailPoints[i+1].x, trailPoints[i+1].y);
+        }
+        
+        // Rimuovi ticker se l'abilità non è più attiva
+        if (!gameState.abilities.active.speed) {
+            app.ticker.remove(trailTicker);
+        }
+    });
+    
+    return trail;
+}
+
+// Abilità: Scudo protettivo
+function activateShield() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    // Durata e cooldown
+    const duration = 5000; // 5 secondi
+    const cooldownTime = 15000; // 15 secondi
+    
+    // Imposta il cooldown
+    gameState.abilities.cooldowns.shield = Date.now() + cooldownTime;
+    gameState.abilities.active.shield = true;
+    
+    // Mostra messaggio
+    showMessage('Scudo Energetico attivato!', 'ability');
+    
+    // Crea effetto visivo
+    const shield = createShieldEffect(player);
+    
+    // Termina dopo la durata
+    setTimeout(() => {
+        gameState.abilities.active.shield = false;
+        showMessage('Scudo Energetico terminato', 'info');
+        
+        // Rimuovi effetto visivo
+        if (shield && shield.parent) {
+            gsap.to(shield, {
+                alpha: 0,
+                duration: 0.5,
+                onComplete: () => {
+                    if (shield.parent) {
+                        shield.parent.removeChild(shield);
+                    }
+                }
+            });
+        }
+    }, duration);
+}
+
+// Crea effetto visivo per lo scudo
+function createShieldEffect(player) {
+    const shield = new PIXI.Graphics();
+    shield.beginFill(0x3366ff, 0.2);
+    shield.lineStyle(3, 0x3366ff, 0.8);
+    shield.drawCircle(0, 0, player.size * 1.5);
+    shield.endFill();
+    
+    player.addChild(shield);
+    
+    // Animazione pulsante
+    gsap.to(shield, {
+        alpha: 0.5,
+        duration: 0.8,
+        repeat: -1,
+        yoyo: true
+    });
+    
+    return shield;
+}
+
+// Abilità: Attacco a distanza
+function fireAttack() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    // Cooldown dell'attacco
+    const cooldownTime = 3000; // 3 secondi
+    
+    // Imposta il cooldown
+    gameState.abilities.cooldowns.attack = Date.now() + cooldownTime;
+    
+    // Mostra messaggio
+    showMessage('Raggio Letale!', 'ability');
+    
+    // Ottieni la direzione in base ai tasti premuti
+    let direction = { x: 0, y: 0 };
+    
+    if (gameState.keys.w) direction.y = -1;
+    if (gameState.keys.a) direction.x = -1;
+    if (gameState.keys.s) direction.y = 1;
+    if (gameState.keys.d) direction.x = 1;
+    
+    // Normalizza la direzione
+    const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+    if (length > 0) {
+        direction.x /= length;
+        direction.y /= length;
+    } else {
+        // Se non ci sono tasti direzionali premuti, spara verso destra
+        direction.x = 1;
+    }
+    
+    // Crea il proiettile
+    createProjectile(player, direction);
+    
+    // Invia al server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(msgpack.encode({
+            type: 'attack',
+            id: gameState.playerId,
+            x: player.x,
+            y: player.y,
+            dirX: direction.x,
+            dirY: direction.y
+        }));
+    }
+}
+
+// Crea un proiettile
+function createProjectile(player, direction) {
+    // Crea il proiettile
+    const projectile = new PIXI.Graphics();
+    projectile.beginFill(0xff3366);
+    projectile.drawCircle(0, 0, 8);
+    projectile.endFill();
+    
+    // Aggiungi una scia luminosa
+    const trail = new PIXI.Graphics();
+    trail.beginFill(0xff3366, 0.3);
+    trail.drawCircle(0, 0, 12);
+    trail.endFill();
+    
+    // Crea un container
+    const container = new PIXI.Container();
+    container.addChild(trail);
+    container.addChild(projectile);
+    
+    // Posiziona il proiettile davanti al giocatore
+    container.x = player.x + direction.x * (player.size + 10);
+    container.y = player.y + direction.y * (player.size + 10);
+    container.vx = direction.x * 10; // Velocità del proiettile
+    container.vy = direction.y * 10;
+    container.damage = 20; // Danno del proiettile
+    container.ownerId = gameState.playerId; // Chi ha sparato
+    
+    // Aggiungi alla scena
+    app.stage.addChild(container);
+    
+    // Registra nel gameState se necessario
+    if (!gameState.projectiles) {
+        gameState.projectiles = [];
+    }
+    gameState.projectiles.push(container);
+    
+    // Effetto di lancio
+    createProjectileLaunchEffect(player, direction);
+    
+    // Anima il proiettile
+    animateProjectile(container);
+}
+
+// Effetto visivo per il lancio del proiettile
+function createProjectileLaunchEffect(player, direction) {
+    const startX = player.x;
+    const startY = player.y;
+    
+    // Flash sul giocatore
+    const flash = new PIXI.Graphics();
+    flash.beginFill(0xff3366, 0.5);
+    flash.drawCircle(0, 0, player.size * 1.2);
+    flash.endFill();
+    flash.x = startX;
+    flash.y = startY;
+    app.stage.addChild(flash);
+    
+    gsap.to(flash, {
+        alpha: 0,
+        pixi: { scale: 1.5 },
+        duration: 0.3,
+        onComplete: () => {
+            app.stage.removeChild(flash);
+        }
+    });
+}
+
+// Anima un proiettile
+function animateProjectile(projectile) {
+    // Effetto pulse sulla scia
+    gsap.to(projectile.children[0], {
+        alpha: 0.1,
+        duration: 0.3,
+        repeat: -1,
+        yoyo: true
+    });
+    
+    // Ticker per il movimento
+    const ticker = app.ticker.add(() => {
+        // Muovi il proiettile
+        projectile.x += projectile.vx;
+        projectile.y += projectile.vy;
+        
+        // Controlla collisioni con altri giocatori
+        checkProjectileCollisions(projectile);
+        
+        // Rimuovi se fuori schermo
+        if (projectile.x < -50 || projectile.x > app.screen.width + 50 ||
+            projectile.y < -50 || projectile.y > app.screen.height + 50) {
+            app.stage.removeChild(projectile);
+            app.ticker.remove(ticker);
+            
+            // Rimuovi dalla lista
+            if (gameState.projectiles) {
+                const index = gameState.projectiles.indexOf(projectile);
+                if (index > -1) {
+                    gameState.projectiles.splice(index, 1);
+                }
+            }
+        }
+    });
+}
+
+// Controlla se un proiettile colpisce altri giocatori
+function checkProjectileCollisions(projectile) {
+    // Non colpire il proprio giocatore
+    gameState.players.forEach((player, id) => {
+        if (id !== projectile.ownerId) {
+            const dx = projectile.x - player.x;
+            const dy = projectile.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Se il proiettile colpisce un giocatore
+            if (distance < player.size + 8) {
+                // Crea effetto visivo di impatto
+                createImpactEffect(projectile.x, projectile.y);
+                
+                // Rimuovi il proiettile
+                app.stage.removeChild(projectile);
+                const index = gameState.projectiles.indexOf(projectile);
+                if (index > -1) {
+                    gameState.projectiles.splice(index, 1);
+                }
+                
+                // Invia hit al server
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(msgpack.encode({
+                        type: 'hit',
+                        id: projectile.ownerId,
+                        targetId: id,
+                        damage: projectile.damage
+                    }));
+                }
+            }
+        }
+    });
+}
+
+// Crea effetto di impatto
+function createImpactEffect(x, y) {
+    // Flash circolare
+    const impact = new PIXI.Graphics();
+    impact.beginFill(0xff3366, 0.7);
+    impact.drawCircle(0, 0, 15);
+    impact.endFill();
+    impact.x = x;
+    impact.y = y;
+    app.stage.addChild(impact);
+    
+    // Particelle di impatto
+    for (let i = 0; i < 10; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(0xff3366);
+        particle.drawCircle(0, 0, Math.random() * 3 + 1);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        app.stage.addChild(particle);
+        
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 30 + 10;
+        const duration = Math.random() * 0.5 + 0.2;
+        
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration,
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+    
+    // Anima e rimuovi il flash
+    gsap.to(impact, {
+        alpha: 0,
+        pixi: { scale: 3 },
+        duration: 0.4,
+        onComplete: () => {
+            app.stage.removeChild(impact);
+        }
+    });
+}
+
+// Mostra un messaggio a schermo
+function showMessage(text, type = 'info') {
+    const message = document.createElement('div');
+    message.className = `game-message ${type}`;
+    message.textContent = text;
+    
+    document.body.appendChild(message);
+    
+    // Animazione
+    gsap.fromTo(message, 
+        { y: 20, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.3 }
+    );
+    
+    // Rimuovi dopo un po'
+    setTimeout(() => {
+        gsap.to(message, {
+            y: -20, opacity: 0, duration: 0.3,
+            onComplete: () => message.remove()
+        });
+    }, 2000);
+} 
