@@ -1,8 +1,9 @@
 {
   "version": 2,
-  "framework": "static",
-  "outputDirectory": "public",
-  "buildCommand": "",
-  "installCommand": "",
-  "rootDirectory": "frontend"
+  "builds": [
+    { "src": "frontend/public/**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/frontend/public/$1" }
+  ]
 } 
