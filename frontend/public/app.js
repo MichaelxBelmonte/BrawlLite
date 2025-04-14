@@ -2,8 +2,9 @@
 const app = new PIXI.Application({
     width: 1280,
     height: 720,
-    backgroundColor: 0x2c3e50,
+    backgroundColor: 0x0a0a0a,
     resolution: window.devicePixelRatio || 1,
+    antialias: true
 });
 document.getElementById('game-container').appendChild(app.view);
 
@@ -41,21 +42,54 @@ const gameState = {
 
 // Funzione per creare uno sprite giocatore
 function createPlayerSprite(playerId, isLocalPlayer = false) {
-    const graphics = new PIXI.Graphics();
-    graphics.beginFill(isLocalPlayer ? 0x3498db : 0xe74c3c);
-    graphics.drawCircle(0, 0, 20);
-    graphics.endFill();
+    const container = new PIXI.Container();
     
-    const sprite = new PIXI.Sprite(app.renderer.generateTexture(graphics));
-    sprite.anchor.set(0.5);
-    sprite.x = Math.random() * app.screen.width;
-    sprite.y = Math.random() * app.screen.height;
-    sprite.targetX = sprite.x;
-    sprite.targetY = sprite.y;
+    // Corpo principale
+    const bodyColor = isLocalPlayer ? 0x00ff88 : 0xff4500;
+    const body = new PIXI.Graphics();
+    body.beginFill(bodyColor);
+    body.drawCircle(0, 0, 20);
+    body.endFill();
     
-    app.stage.addChild(sprite);
+    // Effetto glow
+    const glow = new PIXI.Graphics();
+    glow.beginFill(bodyColor, 0.3);
+    glow.drawCircle(0, 0, 30);
+    glow.endFill();
     
-    return sprite;
+    // Nome giocatore (usa le prime 4 cifre dell'ID)
+    const playerName = new PIXI.Text(playerId.substring(0, 4), {
+        fontFamily: 'Arial',
+        fontSize: 12,
+        fill: 0xffffff,
+        align: 'center'
+    });
+    playerName.anchor.set(0.5);
+    playerName.y = -35;
+    
+    // Aggiungi tutto al container
+    container.addChild(glow);
+    container.addChild(body);
+    container.addChild(playerName);
+    
+    // Posizione iniziale casuale
+    container.x = Math.random() * (app.screen.width - 100) + 50;
+    container.y = Math.random() * (app.screen.height - 100) + 50;
+    container.targetX = container.x;
+    container.targetY = container.y;
+    
+    // Aggiungi al display
+    app.stage.addChild(container);
+    
+    // Aggiungi effetto "pulse" per il giocatore locale
+    if (isLocalPlayer) {
+        app.ticker.add(() => {
+            const time = performance.now() / 1000;
+            glow.scale.set(1 + Math.sin(time * 2) * 0.1);
+        });
+    }
+    
+    return container;
 }
 
 // Imposta input da tastiera
@@ -131,7 +165,72 @@ function interpolateOtherPlayers() {
 app.ticker.add((delta) => {
     updateMovement(delta);
     interpolateOtherPlayers();
+    updateHUD();
 });
+
+// Funzione per aggiornare l'HUD
+function updateHUD() {
+    const player = gameState.players.get(gameState.playerId);
+    if (player) {
+        document.getElementById('position').textContent = `Posizione: ${Math.round(player.x)},${Math.round(player.y)}`;
+    }
+    
+    // Aggiorna contatore giocatori
+    const playerCount = gameState.players.size;
+    document.getElementById('player-count').textContent = `Giocatori: ${playerCount}`;
+}
+
+// Aggiungi effetto di sfondo
+function createBackgroundEffect() {
+    // Crea 50 particelle di sfondo
+    for (let i = 0; i < 50; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        particle.style.left = `${Math.random() * 100}%`;
+        particle.style.top = `${Math.random() * 100}%`;
+        particle.style.opacity = Math.random() * 0.5 + 0.2;
+        document.body.appendChild(particle);
+        
+        // Animazione casuale
+        anime({
+            targets: particle,
+            translateX: anime.random(-100, 100),
+            translateY: anime.random(-100, 100),
+            scale: [0.1, 0.6],
+            opacity: [0.4, 0.2],
+            duration: anime.random(5000, 10000),
+            easing: 'easeInOutSine',
+            complete: () => {
+                document.body.removeChild(particle);
+                createParticle();
+            }
+        });
+    }
+}
+
+// Creiamo particelle singole per sostituire quelle che scompaiono
+function createParticle() {
+    const particle = document.createElement('div');
+    particle.classList.add('particle');
+    particle.style.left = `${Math.random() * 100}%`;
+    particle.style.top = `${Math.random() * 100}%`;
+    particle.style.opacity = Math.random() * 0.5 + 0.2;
+    document.body.appendChild(particle);
+    
+    anime({
+        targets: particle,
+        translateX: anime.random(-100, 100),
+        translateY: anime.random(-100, 100),
+        scale: [0.1, 0.6],
+        opacity: [0.4, 0.2],
+        duration: anime.random(5000, 10000),
+        easing: 'easeInOutSine',
+        complete: () => {
+            document.body.removeChild(particle);
+            createParticle();
+        }
+    });
+}
 
 // Connessione WebSocket
 let socket;
@@ -265,3 +364,10 @@ function connectWebSocket() {
 
 // Avvia la connessione WebSocket
 connectWebSocket(); 
+
+// Inizializza gli effetti di sfondo (se anime.js è disponibile)
+if (typeof anime !== 'undefined') {
+    createBackgroundEffect();
+} else {
+    console.log('anime.js non disponibile, effetti di sfondo disabilitati');
+} 
