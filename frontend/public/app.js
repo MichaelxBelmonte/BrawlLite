@@ -207,9 +207,12 @@ function updateMovement(delta) {
     if (gameState.keys.s) player.y += speed * delta;
     if (gameState.keys.d) player.x += speed * delta;
     
-    // Limita movimento all'interno dello schermo
-    player.x = Math.max(20, Math.min(app.screen.width - 20, player.x));
-    player.y = Math.max(20, Math.min(app.screen.height - 20, player.y));
+    // Limita movimento all'interno dello schermo usando valori predefiniti se app.screen non è disponibile
+    const screenWidth = (app && app.screen) ? app.screen.width : 1280;
+    const screenHeight = (app && app.screen) ? app.screen.height : 720;
+    
+    player.x = Math.max(20, Math.min(screenWidth - 20, player.x));
+    player.y = Math.max(20, Math.min(screenHeight - 20, player.y));
     
     // Invia aggiornamenti solo se la posizione è cambiata
     const now = Date.now();
@@ -381,7 +384,11 @@ function connectWebSocket() {
                     const activePlayers = new Set(data.players.map(p => p.id));
                     [...gameState.players.keys()].forEach(id => {
                         if (!activePlayers.has(id) && id !== gameState.playerId) {
-                            app.stage.removeChild(gameState.players.get(id));
+                            const sprite = gameState.players.get(id);
+                            // Verifica che app.stage sia disponibile prima di rimuovere
+                            if (app && app.stage && sprite && sprite.parent) {
+                                app.stage.removeChild(sprite);
+                            }
                             gameState.players.delete(id);
                         }
                     });
@@ -414,7 +421,11 @@ function connectWebSocket() {
                     
                 case 'leave':
                     if (gameState.players.has(data.id)) {
-                        app.stage.removeChild(gameState.players.get(data.id));
+                        const sprite = gameState.players.get(data.id);
+                        // Verifica che app.stage sia disponibile prima di rimuovere
+                        if (app && app.stage && sprite && sprite.parent) {
+                            app.stage.removeChild(sprite);
+                        }
                         gameState.players.delete(data.id);
                     }
                     break;
