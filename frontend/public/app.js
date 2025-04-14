@@ -1,14 +1,7 @@
 // Configurazione PixiJS
-const app = new PIXI.Application({
-    width: 1280,
-    height: 720,
-    backgroundColor: 0x0a0a0a,
-    resolution: window.devicePixelRatio || 1,
-    antialias: true
-});
-document.getElementById('game-container').appendChild(app.view);
-
-// Inizializzazione msgpack
+let app;
+let socket;
+let reconnectAttempts = 0;
 const msgpack = window.msgpack5();
 
 // Funzione per ottenere variabili d'ambiente
@@ -61,18 +54,40 @@ const gameState = {
     projectiles: []
 };
 
-// Inizializzazione del gioco quando l'utente inserisce il nome
-document.getElementById('start-button').addEventListener('click', () => {
-    const username = document.getElementById('username-input').value.trim();
-    if (username) {
-        // Nascondi schermata di login
-        document.getElementById('login-screen').style.display = 'none';
-        // Mostra il contenitore di gioco
-        document.getElementById('game-container').style.display = 'block';
-        
-        // Inizializza il gioco
-        initGame(username);
-    }
+// Inizializza il gioco quando il DOM è completamente caricato
+document.addEventListener('DOMContentLoaded', () => {
+    // Inizializza PixiJS
+    app = new PIXI.Application({
+        width: 1280,
+        height: 720,
+        backgroundColor: 0x0a0a0a,
+        resolution: window.devicePixelRatio || 1,
+        antialias: true
+    });
+    document.getElementById('game-container').appendChild(app.view);
+    
+    // Inizializzazione del gioco quando l'utente inserisce il nome
+    document.getElementById('start-button').addEventListener('click', () => {
+        const username = document.getElementById('username-input').value.trim();
+        if (username) {
+            // Nascondi schermata di login
+            document.getElementById('login-screen').style.display = 'none';
+            // Mostra il contenitore di gioco
+            document.getElementById('game-container').style.display = 'block';
+            
+            // Inizializza il gioco
+            initGame(username);
+        }
+    });
+    
+    // Configura il ticker di gioco
+    app.ticker.add((delta) => {
+        updateMovement(delta);
+        interpolateOtherPlayers();
+        checkEnergyCollection();
+        checkPlayerCollisions();
+        updateHUD();
+    });
 });
 
 // Funzione di inizializzazione del gioco
@@ -221,37 +236,28 @@ function interpolateOtherPlayers() {
     });
 }
 
-// Configura il ticker di gioco prima di inizializzare la connessione
-app.ticker.add((delta) => {
-    updateMovement(delta);
-    interpolateOtherPlayers();
-    checkEnergyCollection();
-    checkPlayerCollisions();
-    updateHUD();
-});
-
 // Funzione per aggiornare l'HUD
 function updateHUD() {
     const player = gameState.players.get(gameState.playerId);
     if (player) {
-        document.getElementById('position').textContent = `Posizione: ${Math.round(player.x)},${Math.round(player.y)}`;
-        
-        // Aggiorna punteggio
-        const scoreElement = document.getElementById('score');
-        if (scoreElement) {
-            scoreElement.textContent = `Punteggio: ${player.score}`;
+        // Aggiorna livello
+        const levelElement = document.getElementById('player-level');
+        if (levelElement) {
+            levelElement.textContent = `Livello: ${gameState.level}`;
         }
         
         // Aggiorna dimensione
-        const sizeElement = document.getElementById('size');
+        const sizeElement = document.getElementById('player-size');
         if (sizeElement) {
             sizeElement.textContent = `Dimensione: ${Math.round(player.size)}`;
         }
+        
+        // Aggiorna punteggio
+        const scoreElement = document.getElementById('player-score');
+        if (scoreElement) {
+            scoreElement.textContent = `Punteggio: ${player.score || 0}`;
+        }
     }
-    
-    // Aggiorna contatore giocatori
-    const playerCount = gameState.players.size;
-    document.getElementById('player-count').textContent = `Giocatori: ${playerCount}`;
     
     // Aggiorna classifica
     updateLeaderboard();
@@ -310,422 +316,6 @@ function createParticle() {
 }
 
 // Connessione WebSocket
-let socket;
-let reconnectAttempts = 0;
-
-// Funzione per creare un punto energia
-function createEnergyPoint() {
-    if (gameState.energyPoints.size >= MAX_ENERGY_POINTS) return;
-    
-    const id = crypto.randomUUID();
-    const pointSize = Math.random() * 5 + 5; // Dimensioni variabili
-    
-    // Crea il punto energia
-    const energyPoint = new PIXI.Graphics();
-    energyPoint.beginFill(0xffff00, 0.8);
-    energyPoint.drawCircle(0, 0, pointSize);
-    energyPoint.endFill();
-    
-    // Aggiungi un glow
-    const glow = new PIXI.Graphics();
-    glow.beginFill(0xffff00, 0.3);
-    glow.drawCircle(0, 0, pointSize + 5);
-    glow.endFill();
-    
-    // Crea un container per il punto energia
-    const container = new PIXI.Container();
-    container.addChild(glow);
-    container.addChild(energyPoint);
-    container.value = Math.round(pointSize) * ENERGY_VALUE; // Valore proporzionale alla dimensione
-    
-    // Posiziona il punto energia in un punto casuale dello schermo
-    container.x = Math.random() * (app.screen.width - 100) + 50;
-    container.y = Math.random() * (app.screen.height - 100) + 50;
-    
-    // Aggiungi animazione di pulsazione
-    app.ticker.add(() => {
-        const time = performance.now() / 1000;
-        glow.scale.set(1 + Math.sin(time * 3) * 0.2);
-    });
-    
-    // Aggiungi al display e al gameState
-    app.stage.addChild(container);
-    gameState.energyPoints.set(id, container);
-    
-    return container;
-}
-
-// Aggiungi energia iniziale
-function spawnInitialEnergy() {
-    // Crea un numero iniziale di punti energia
-    for (let i = 0; i < MAX_ENERGY_POINTS / 2; i++) {
-        createEnergyPoint();
-    }
-    
-    // Continua a creare energia a intervalli
-    setInterval(() => {
-        if (gameState.energyPoints.size < MAX_ENERGY_POINTS) {
-            createEnergyPoint();
-        }
-    }, 1000);
-}
-
-// Funzione per controllare se un giocatore ha raccolto energia
-function checkEnergyCollection() {
-    const player = gameState.players.get(gameState.playerId);
-    if (!player) return;
-    
-    gameState.energyPoints.forEach((energyPoint, id) => {
-        // Calcola distanza
-        const dx = player.x - energyPoint.x;
-        const dy = player.y - energyPoint.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // Se il giocatore tocca l'energia, la raccoglie
-        if (distance < player.size) {
-            collectEnergy(player, energyPoint, id);
-        }
-    });
-}
-
-// Raccogli energia e aggiorna il punteggio
-function collectEnergy(player, energyPoint, energyId) {
-    // Aggiorna punteggio
-    player.score += energyPoint.value;
-    gameState.scores.set(gameState.playerId, player.score);
-    
-    // Aumenta dimensione del giocatore (con limite massimo)
-    const newSize = Math.min(player.size + 1, MAX_SIZE);
-    updatePlayerSize(player, newSize);
-    
-    // Controlla se il giocatore è salito di livello
-    checkLevelUp(player);
-    
-    // Rimuovi il punto energia
-    app.stage.removeChild(energyPoint);
-    gameState.energyPoints.delete(energyId);
-    
-    // Crea un effetto visivo per la raccolta
-    createCollectEffect(energyPoint.x, energyPoint.y);
-    
-    // Invia l'aggiornamento al server
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(msgpack.encode({
-            type: 'score',
-            id: gameState.playerId,
-            score: player.score,
-            size: player.size,
-            level: gameState.level
-        }));
-    }
-}
-
-// Controlla se il giocatore è salito di livello
-function checkLevelUp(player) {
-    // Trova il livello corrispondente alla dimensione attuale
-    let newLevel = 1;
-    for (const threshold of LEVEL_THRESHOLDS) {
-        if (player.size >= threshold.size) {
-            newLevel = threshold.level;
-        } else {
-            break;
-        }
-    }
-    
-    // Se è salito di livello
-    if (newLevel > gameState.level) {
-        const oldLevel = gameState.level;
-        gameState.level = newLevel;
-        
-        // Trova informazioni sul nuovo livello
-        const levelInfo = LEVEL_THRESHOLDS.find(t => t.level === newLevel);
-        
-        // Mostra messaggio di level up
-        showLevelUpMessage(levelInfo.name, levelInfo.ability);
-        
-        // Sblocca nuove abilità
-        if (levelInfo.ability) {
-            unlockAbility(levelInfo.ability);
-        }
-        
-        // Aggiorna visivamente il giocatore
-        updatePlayerAppearance(player, oldLevel, newLevel);
-    }
-}
-
-// Mostra un messaggio di level up
-function showLevelUpMessage(rank, ability) {
-    const message = document.createElement('div');
-    message.className = 'level-up-message';
-    message.innerHTML = `
-        <div class="level-title">Livello Aumentato!</div>
-        <div class="level-rank">Sei diventato: ${rank}</div>
-        ${ability ? `<div class="level-ability">Nuova abilità: ${getAbilityName(ability)}</div>` : ''}
-        ${ability ? `<div class="level-key">Premi [${getAbilityKey(ability)}] per usarla</div>` : ''}
-    `;
-    
-    document.body.appendChild(message);
-    
-    // Animazione di comparsa e scomparsa
-    gsap.fromTo(message, 
-        { y: -50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.5, ease: "back.out" }
-    );
-    
-    setTimeout(() => {
-        gsap.to(message, {
-            y: 50, opacity: 0, duration: 0.5, ease: "back.in",
-            onComplete: () => message.remove()
-        });
-    }, 3000);
-}
-
-// Sblocca una nuova abilità
-function unlockAbility(ability) {
-    // Aggiunge l'event listener per il tasto corrispondente
-    if (!window[`${ability}KeyHandler`]) {
-        window[`${ability}KeyHandler`] = true;
-        
-        window.addEventListener('keydown', (e) => {
-            const key = getAbilityKey(ability);
-            if (e.key.toLowerCase() === key && gameState.level >= getAbilityMinLevel(ability)) {
-                activateAbility(ability);
-            }
-        });
-    }
-}
-
-// Restituisce il nome dell'abilità
-function getAbilityName(ability) {
-    switch(ability) {
-        case 'speed': return 'Scatto Turbo';
-        case 'shield': return 'Scudo Energetico';
-        case 'attack': return 'Raggio Letale';
-        default: return ability;
-    }
-}
-
-// Restituisce il tasto per attivare l'abilità
-function getAbilityKey(ability) {
-    switch(ability) {
-        case 'speed': return 'q';
-        case 'shield': return 'e';
-        case 'attack': return 'spazio';
-        default: return '?';
-    }
-}
-
-// Restituisce il livello minimo per l'abilità
-function getAbilityMinLevel(ability) {
-    const threshold = LEVEL_THRESHOLDS.find(t => t.ability === ability);
-    return threshold ? threshold.level : 999;
-}
-
-// Aggiorna l'aspetto del giocatore in base al livello
-function updatePlayerAppearance(player, oldLevel, newLevel) {
-    // Rimuove vecchi elementi visivi
-    while (player.children.length > 3) { // Mantiene corpo, glow e nome
-        player.removeChildAt(3);
-    }
-    
-    // Aggiunge elementi visivi in base al livello
-    if (newLevel >= 2) {
-        // Livello 2: Aura speciale
-        const aura = new PIXI.Graphics();
-        aura.beginFill(0x00ffff, 0.2);
-        aura.drawCircle(0, 0, player.size + 15);
-        aura.endFill();
-        player.addChildAt(aura, 0); // Sotto a tutto
-        
-        // Animazione pulsante
-        gsap.to(aura, {
-            alpha: 0.4,
-            duration: 1,
-            yoyo: true,
-            repeat: -1
-        });
-    }
-    
-    if (newLevel >= 3) {
-        // Livello 3: Particelle orbitanti
-        for (let i = 0; i < 3; i++) {
-            const orbit = Math.random() * 20 + player.size + 5;
-            const particle = new PIXI.Graphics();
-            particle.beginFill(0xffff00);
-            particle.drawCircle(0, 0, 3);
-            particle.endFill();
-            particle.x = orbit;
-            particle.y = 0;
-            player.addChild(particle);
-            
-            // Orbita attorno al giocatore
-            gsap.to(particle, {
-                duration: Math.random() * 3 + 2,
-                repeat: -1,
-                ease: "none",
-                onUpdate: function() {
-                    const angle = this.progress() * Math.PI * 2 + (i * Math.PI * 2 / 3);
-                    particle.x = Math.cos(angle) * orbit;
-                    particle.y = Math.sin(angle) * orbit;
-                }
-            });
-        }
-    }
-    
-    if (newLevel >= 4) {
-        // Livello 4: Corona/effetto speciale
-        const crown = new PIXI.Graphics();
-        crown.beginFill(0xffd700);
-        
-        // Disegna una corona stilizzata
-        crown.moveTo(-15, -player.size - 10);
-        crown.lineTo(-10, -player.size - 20);
-        crown.lineTo(-5, -player.size - 10);
-        crown.lineTo(0, -player.size - 20);
-        crown.lineTo(5, -player.size - 10);
-        crown.lineTo(10, -player.size - 20);
-        crown.lineTo(15, -player.size - 10);
-        crown.lineTo(15, -player.size - 5);
-        crown.lineTo(-15, -player.size - 5);
-        crown.closePath();
-        
-        crown.endFill();
-        player.addChild(crown);
-    }
-    
-    // Animazione di level up
-    gsap.to(player.scale, {
-        x: player.scale.x * 1.2,
-        y: player.scale.y * 1.2,
-        duration: 0.3,
-        yoyo: true,
-        repeat: 1
-    });
-    
-    // Effetto particellare di level up
-    createLevelUpEffect(player.x, player.y, newLevel);
-}
-
-// Aggiorna la dimensione di un giocatore
-function updatePlayerSize(player, newSize) {
-    player.size = newSize;
-    
-    // Aggiorna dimensione visiva
-    // Nota: in una implementazione reale, dovremmo ricreare la grafica 
-    // invece di usare scale, per semplicità usiamo scale qui
-    const scaleRatio = newSize / INITIAL_SIZE;
-    player.scale.set(scaleRatio);
-    
-    // Aggiorna la posizione del nome
-    const nameText = player.children[2]; // Assume che il nome sia il terzo figlio
-    if (nameText) {
-        nameText.y = -newSize - 15;
-    }
-}
-
-// Crea effetto visivo per la raccolta di energia
-function createCollectEffect(x, y) {
-    // Crea particelle
-    for (let i = 0; i < 8; i++) {
-        const particle = new PIXI.Graphics();
-        particle.beginFill(0xffff00);
-        particle.drawCircle(0, 0, 3);
-        particle.endFill();
-        particle.x = x;
-        particle.y = y;
-        app.stage.addChild(particle);
-        
-        // Anima particelle in direzioni casuali
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * 40 + 20;
-        const duration = Math.random() * 500 + 500;
-        
-        gsap.to(particle, {
-            x: x + Math.cos(angle) * distance,
-            y: y + Math.sin(angle) * distance,
-            alpha: 0,
-            duration: duration / 1000,
-            onComplete: () => {
-                app.stage.removeChild(particle);
-            }
-        });
-    }
-}
-
-// Controlla se un giocatore può mangiare un altro
-function checkPlayerCollisions() {
-    const player = gameState.players.get(gameState.playerId);
-    if (!player) return;
-    
-    gameState.players.forEach((otherPlayer, id) => {
-        // Salta il nostro giocatore
-        if (id === gameState.playerId) return;
-        
-        // Calcola distanza
-        const dx = player.x - otherPlayer.x;
-        const dy = player.y - otherPlayer.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // Un giocatore può mangiare un altro se è almeno 30% più grande
-        if (distance < player.size && player.size > otherPlayer.size * 1.3) {
-            eatPlayer(player, otherPlayer, id);
-        }
-    });
-}
-
-// Funzione per "mangiare" un altro giocatore
-function eatPlayer(player, otherPlayer, otherId) {
-    // Incrementa punteggio in base alle dimensioni dell'avversario
-    const scoreGain = Math.round(otherPlayer.size * 0.5);
-    player.score += scoreGain;
-    
-    // Incrementa dimensione
-    const newSize = Math.min(player.size + Math.round(otherPlayer.size * 0.2), MAX_SIZE);
-    updatePlayerSize(player, newSize);
-    
-    // Crea effetto visivo
-    createEatEffect(otherPlayer.x, otherPlayer.y);
-    
-    // Invia messaggio al server
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(msgpack.encode({
-            type: 'eat',
-            id: gameState.playerId,
-            target: otherId,
-            score: player.score,
-            size: player.size
-        }));
-    }
-}
-
-// Crea effetto visivo per mangiare un giocatore
-function createEatEffect(x, y) {
-    // Simile all'effetto di raccolta energia ma più grande
-    for (let i = 0; i < 15; i++) {
-        const particle = new PIXI.Graphics();
-        particle.beginFill(0xff6600);
-        particle.drawCircle(0, 0, 5);
-        particle.endFill();
-        particle.x = x;
-        particle.y = y;
-        app.stage.addChild(particle);
-        
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * 60 + 30;
-        const duration = Math.random() * 700 + 300;
-        
-        gsap.to(particle, {
-            x: x + Math.cos(angle) * distance,
-            y: y + Math.sin(angle) * distance,
-            alpha: 0,
-            duration: duration / 1000,
-            onComplete: () => {
-                app.stage.removeChild(particle);
-            }
-        });
-    }
-}
-
 function connectWebSocket() {
     console.log("Tentativo di connessione WebSocket a:", WS_URL);
     socket = new WebSocket(WS_URL);
@@ -854,7 +444,7 @@ function connectWebSocket() {
 
 // Aggiorna la classifica dei giocatori
 function updateLeaderboard() {
-    const leaderboardElement = document.getElementById('leaderboard');
+    const leaderboardElement = document.getElementById('leaderboard-list');
     if (!leaderboardElement) return;
     
     // Crea un array di giocatori con punteggi
@@ -875,12 +465,6 @@ function updateLeaderboard() {
     
     // Svuota la classifica
     leaderboardElement.innerHTML = '';
-    
-    // Aggiungi il titolo della classifica
-    const title = document.createElement('div');
-    title.className = 'leaderboard-title';
-    title.textContent = 'Classifica';
-    leaderboardElement.appendChild(title);
     
     // Aggiungi ogni giocatore alla classifica
     topPlayers.forEach((player, index) => {
@@ -1459,4 +1043,360 @@ function spawnEnergyPoint() {
     });
     
     return container;
+}
+
+// Restituisce il nome dell'abilità
+function getAbilityName(ability) {
+    switch(ability) {
+        case 'speed': return 'Scatto Turbo';
+        case 'shield': return 'Scudo Energetico';
+        case 'attack': return 'Raggio Letale';
+        default: return ability;
+    }
+}
+
+// Restituisce il tasto per attivare l'abilità
+function getAbilityKey(ability) {
+    switch(ability) {
+        case 'speed': return 'q';
+        case 'shield': return 'e';
+        case 'attack': return 'spazio';
+        default: return '?';
+    }
+}
+
+// Restituisce il livello minimo per l'abilità
+function getAbilityMinLevel(ability) {
+    const threshold = LEVEL_THRESHOLDS.find(t => t.ability === ability);
+    return threshold ? threshold.level : 999;
+}
+
+// Aggiorna l'aspetto del giocatore in base al livello
+function updatePlayerAppearance(player, oldLevel, newLevel) {
+    // Rimuove vecchi elementi visivi
+    while (player.children.length > 3) { // Mantiene corpo, glow e nome
+        player.removeChildAt(3);
+    }
+    
+    // Aggiunge elementi visivi in base al livello
+    if (newLevel >= 2) {
+        // Livello 2: Aura speciale
+        const aura = new PIXI.Graphics();
+        aura.beginFill(0x00ffff, 0.2);
+        aura.drawCircle(0, 0, player.size + 15);
+        aura.endFill();
+        player.addChildAt(aura, 0); // Sotto a tutto
+        
+        // Animazione pulsante
+        gsap.to(aura, {
+            alpha: 0.4,
+            duration: 1,
+            yoyo: true,
+            repeat: -1
+        });
+    }
+    
+    if (newLevel >= 3) {
+        // Livello 3: Particelle orbitanti
+        for (let i = 0; i < 3; i++) {
+            const orbit = Math.random() * 20 + player.size + 5;
+            const particle = new PIXI.Graphics();
+            particle.beginFill(0xffff00);
+            particle.drawCircle(0, 0, 3);
+            particle.endFill();
+            particle.x = orbit;
+            particle.y = 0;
+            player.addChild(particle);
+            
+            // Orbita attorno al giocatore
+            gsap.to(particle, {
+                duration: Math.random() * 3 + 2,
+                repeat: -1,
+                ease: "none",
+                onUpdate: function() {
+                    const angle = this.progress() * Math.PI * 2 + (i * Math.PI * 2 / 3);
+                    particle.x = Math.cos(angle) * orbit;
+                    particle.y = Math.sin(angle) * orbit;
+                }
+            });
+        }
+    }
+    
+    if (newLevel >= 4) {
+        // Livello 4: Corona/effetto speciale
+        const crown = new PIXI.Graphics();
+        crown.beginFill(0xffd700);
+        
+        // Disegna una corona stilizzata
+        crown.moveTo(-15, -player.size - 10);
+        crown.lineTo(-10, -player.size - 20);
+        crown.lineTo(-5, -player.size - 10);
+        crown.lineTo(0, -player.size - 20);
+        crown.lineTo(5, -player.size - 10);
+        crown.lineTo(10, -player.size - 20);
+        crown.lineTo(15, -player.size - 10);
+        crown.lineTo(15, -player.size - 5);
+        crown.lineTo(-15, -player.size - 5);
+        crown.closePath();
+        
+        crown.endFill();
+        player.addChild(crown);
+    }
+    
+    // Animazione di level up
+    gsap.to(player.scale, {
+        x: player.scale.x * 1.2,
+        y: player.scale.y * 1.2,
+        duration: 0.3,
+        yoyo: true,
+        repeat: 1
+    });
+    
+    // Effetto particellare di level up
+    createLevelUpEffect(player.x, player.y, newLevel);
+}
+
+// Aggiorna la dimensione di un giocatore
+function updatePlayerSize(player, newSize) {
+    player.size = newSize;
+    
+    // Aggiorna dimensione visiva
+    // Nota: in una implementazione reale, dovremmo ricreare la grafica 
+    // invece di usare scale, per semplicità usiamo scale qui
+    const scaleRatio = newSize / INITIAL_SIZE;
+    player.scale.set(scaleRatio);
+    
+    // Aggiorna la posizione del nome
+    const nameText = player.children[2]; // Assume che il nome sia il terzo figlio
+    if (nameText) {
+        nameText.y = -newSize - 15;
+    }
+}
+
+// Crea effetto visivo per la raccolta di energia
+function createCollectEffect(x, y) {
+    // Crea particelle
+    for (let i = 0; i < 8; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(0xffff00);
+        particle.drawCircle(0, 0, 3);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        app.stage.addChild(particle);
+        
+        // Anima particelle in direzioni casuali
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 40 + 20;
+        const duration = Math.random() * 500 + 500;
+        
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration / 1000,
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+}
+
+// Controlla se un giocatore può mangiare un altro
+function checkPlayerCollisions() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    gameState.players.forEach((otherPlayer, id) => {
+        // Salta il nostro giocatore
+        if (id === gameState.playerId) return;
+        
+        // Calcola distanza
+        const dx = player.x - otherPlayer.x;
+        const dy = player.y - otherPlayer.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Un giocatore può mangiare un altro se è almeno 30% più grande
+        if (distance < player.size && player.size > otherPlayer.size * 1.3) {
+            eatPlayer(player, otherPlayer, id);
+        }
+    });
+}
+
+// Funzione per "mangiare" un altro giocatore
+function eatPlayer(player, otherPlayer, otherId) {
+    // Incrementa punteggio in base alle dimensioni dell'avversario
+    const scoreGain = Math.round(otherPlayer.size * 0.5);
+    player.score += scoreGain;
+    
+    // Incrementa dimensione
+    const newSize = Math.min(player.size + Math.round(otherPlayer.size * 0.2), MAX_SIZE);
+    updatePlayerSize(player, newSize);
+    
+    // Crea effetto visivo
+    createEatEffect(otherPlayer.x, otherPlayer.y);
+    
+    // Invia messaggio al server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(msgpack.encode({
+            type: 'eat',
+            id: gameState.playerId,
+            target: otherId,
+            score: player.score,
+            size: player.size
+        }));
+    }
+}
+
+// Crea effetto visivo per mangiare un giocatore
+function createEatEffect(x, y) {
+    // Simile all'effetto di raccolta energia ma più grande
+    for (let i = 0; i < 15; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(0xff6600);
+        particle.drawCircle(0, 0, 5);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        app.stage.addChild(particle);
+        
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 60 + 30;
+        const duration = Math.random() * 700 + 300;
+        
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration / 1000,
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+}
+
+// Funzione per controllare se un giocatore ha raccolto energia
+function checkEnergyCollection() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    gameState.energyPoints.forEach((energyPoint, id) => {
+        // Calcola distanza
+        const dx = player.x - energyPoint.x;
+        const dy = player.y - energyPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Se il giocatore tocca l'energia, la raccoglie
+        if (distance < player.size) {
+            collectEnergy(player, energyPoint, id);
+        }
+    });
+}
+
+// Raccogli energia e aggiorna il punteggio
+function collectEnergy(player, energyPoint, energyId) {
+    // Aggiorna punteggio
+    player.score += energyPoint.value;
+    gameState.scores.set(gameState.playerId, player.score);
+    
+    // Aumenta dimensione del giocatore (con limite massimo)
+    const newSize = Math.min(player.size + 1, MAX_SIZE);
+    updatePlayerSize(player, newSize);
+    
+    // Controlla se il giocatore è salito di livello
+    checkLevelUp(player);
+    
+    // Rimuovi il punto energia
+    app.stage.removeChild(energyPoint);
+    gameState.energyPoints.delete(energyId);
+    
+    // Crea un effetto visivo per la raccolta
+    createCollectEffect(energyPoint.x, energyPoint.y);
+    
+    // Invia l'aggiornamento al server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(msgpack.encode({
+            type: 'score',
+            id: gameState.playerId,
+            score: player.score,
+            size: player.size,
+            level: gameState.level
+        }));
+    }
+}
+
+// Mostra un messaggio di level up
+function showLevelUpMessage(rank, ability) {
+    const message = document.createElement('div');
+    message.className = 'level-up-message';
+    message.innerHTML = `
+        <div class="level-title">Livello Aumentato!</div>
+        <div class="level-rank">Sei diventato: ${rank}</div>
+        ${ability ? `<div class="level-ability">Nuova abilità: ${getAbilityName(ability)}</div>` : ''}
+        ${ability ? `<div class="level-key">Premi [${getAbilityKey(ability)}] per usarla</div>` : ''}
+    `;
+    
+    document.body.appendChild(message);
+    
+    // Animazione di comparsa e scomparsa
+    gsap.fromTo(message, 
+        { y: -50, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: "back.out" }
+    );
+    
+    setTimeout(() => {
+        gsap.to(message, {
+            y: 50, opacity: 0, duration: 0.5, ease: "back.in",
+            onComplete: () => message.remove()
+        });
+    }, 3000);
+}
+
+// Sblocca una nuova abilità
+function unlockAbility(ability) {
+    // Aggiunge l'event listener per il tasto corrispondente
+    if (!window[`${ability}KeyHandler`]) {
+        window[`${ability}KeyHandler`] = true;
+        
+        window.addEventListener('keydown', (e) => {
+            const key = getAbilityKey(ability);
+            if (e.key.toLowerCase() === key && gameState.level >= getAbilityMinLevel(ability)) {
+                activateAbility(ability);
+            }
+        });
+    }
+}
+
+// Controlla se il giocatore è salito di livello
+function checkLevelUp(player) {
+    // Trova il livello corrispondente alla dimensione attuale
+    let newLevel = 1;
+    for (const threshold of LEVEL_THRESHOLDS) {
+        if (player.size >= threshold.size) {
+            newLevel = threshold.level;
+        } else {
+            break;
+        }
+    }
+    
+    // Se è salito di livello
+    if (newLevel > gameState.level) {
+        const oldLevel = gameState.level;
+        gameState.level = newLevel;
+        
+        // Trova informazioni sul nuovo livello
+        const levelInfo = LEVEL_THRESHOLDS.find(t => t.level === newLevel);
+        
+        // Mostra messaggio di level up
+        showLevelUpMessage(levelInfo.name, levelInfo.ability);
+        
+        // Sblocca nuove abilità
+        if (levelInfo.ability) {
+            unlockAbility(levelInfo.ability);
+        }
+        
+        // Aggiorna visivamente il giocatore
+        updatePlayerAppearance(player, oldLevel, newLevel);
+    }
 } 
