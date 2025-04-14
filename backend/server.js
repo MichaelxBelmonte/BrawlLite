@@ -10,7 +10,7 @@ const path = require('path');
 dotenv.config();
 
 // Configurazione
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const SYNC_INTERVAL = 500; // ms

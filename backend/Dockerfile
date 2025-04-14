@@ -11,8 +11,8 @@ RUN npm install
 # Copia il resto dei file
 COPY . .
 
-# Espone la porta 3000
-EXPOSE 3000
+# Espone la porta 10000
+EXPOSE 10000
 
 # Avvia il server
 CMD ["node", "server.js"] 
