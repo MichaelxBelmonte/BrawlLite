@@ -25,11 +25,17 @@ function getEnvVar(name, defaultValue) {
 const PLAYER_SPEED = 5;
 const INTERPOLATION_FACTOR = 0.3;
 const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
+const MAX_ENERGY_POINTS = 30;  // Numero massimo di punti energia sulla mappa
+const ENERGY_VALUE = 5;        // Valore di ogni punto energia
+const INITIAL_SIZE = 20;       // Dimensione iniziale dei giocatori
+const MAX_SIZE = 100;          // Dimensione massima raggiungibile
 
 // Stato del gioco
 const gameState = {
     playerId: crypto.randomUUID(),
     players: new Map(),
+    energyPoints: new Map(),  // Punti energia sulla mappa
+    scores: new Map(),        // Punteggi dei giocatori
     keys: {
         w: false,
         a: false,
@@ -41,20 +47,20 @@ const gameState = {
 };
 
 // Funzione per creare uno sprite giocatore
-function createPlayerSprite(playerId, isLocalPlayer = false) {
+function createPlayerSprite(playerId, isLocalPlayer = false, size = INITIAL_SIZE) {
     const container = new PIXI.Container();
     
     // Corpo principale
     const bodyColor = isLocalPlayer ? 0x00ff88 : 0xff4500;
     const body = new PIXI.Graphics();
     body.beginFill(bodyColor);
-    body.drawCircle(0, 0, 20);
+    body.drawCircle(0, 0, size);
     body.endFill();
     
     // Effetto glow
     const glow = new PIXI.Graphics();
     glow.beginFill(bodyColor, 0.3);
-    glow.drawCircle(0, 0, 30);
+    glow.drawCircle(0, 0, size + 10);
     glow.endFill();
     
     // Nome giocatore (usa le prime 4 cifre dell'ID)
@@ -65,7 +71,7 @@ function createPlayerSprite(playerId, isLocalPlayer = false) {
         align: 'center'
     });
     playerName.anchor.set(0.5);
-    playerName.y = -35;
+    playerName.y = -size - 15;
     
     // Aggiungi tutto al container
     container.addChild(glow);
@@ -77,6 +83,8 @@ function createPlayerSprite(playerId, isLocalPlayer = false) {
     container.y = Math.random() * (app.screen.height - 100) + 50;
     container.targetX = container.x;
     container.targetY = container.y;
+    container.size = size; // Memorizziamo la dimensione corrente
+    container.score = 0;   // Punteggio iniziale
     
     // Aggiungi al display
     app.stage.addChild(container);
@@ -165,6 +173,8 @@ function interpolateOtherPlayers() {
 app.ticker.add((delta) => {
     updateMovement(delta);
     interpolateOtherPlayers();
+    checkEnergyCollection();
+    checkPlayerCollisions();
     updateHUD();
 });
 
@@ -173,11 +183,26 @@ function updateHUD() {
     const player = gameState.players.get(gameState.playerId);
     if (player) {
         document.getElementById('position').textContent = `Posizione: ${Math.round(player.x)},${Math.round(player.y)}`;
+        
+        // Aggiorna punteggio
+        const scoreElement = document.getElementById('score');
+        if (scoreElement) {
+            scoreElement.textContent = `Punteggio: ${player.score}`;
+        }
+        
+        // Aggiorna dimensione
+        const sizeElement = document.getElementById('size');
+        if (sizeElement) {
+            sizeElement.textContent = `Dimensione: ${Math.round(player.size)}`;
+        }
     }
     
     // Aggiorna contatore giocatori
     const playerCount = gameState.players.size;
     document.getElementById('player-count').textContent = `Giocatori: ${playerCount}`;
+    
+    // Aggiorna classifica
+    updateLeaderboard();
 }
 
 // Aggiungi effetto di sfondo
@@ -235,6 +260,229 @@ function createParticle() {
 // Connessione WebSocket
 let socket;
 let reconnectAttempts = 0;
+
+// Funzione per creare un punto energia
+function createEnergyPoint() {
+    if (gameState.energyPoints.size >= MAX_ENERGY_POINTS) return;
+    
+    const id = crypto.randomUUID();
+    const pointSize = Math.random() * 5 + 5; // Dimensioni variabili
+    
+    // Crea il punto energia
+    const energyPoint = new PIXI.Graphics();
+    energyPoint.beginFill(0xffff00, 0.8);
+    energyPoint.drawCircle(0, 0, pointSize);
+    energyPoint.endFill();
+    
+    // Aggiungi un glow
+    const glow = new PIXI.Graphics();
+    glow.beginFill(0xffff00, 0.3);
+    glow.drawCircle(0, 0, pointSize + 5);
+    glow.endFill();
+    
+    // Crea un container per il punto energia
+    const container = new PIXI.Container();
+    container.addChild(glow);
+    container.addChild(energyPoint);
+    container.value = Math.round(pointSize) * ENERGY_VALUE; // Valore proporzionale alla dimensione
+    
+    // Posiziona il punto energia in un punto casuale dello schermo
+    container.x = Math.random() * (app.screen.width - 100) + 50;
+    container.y = Math.random() * (app.screen.height - 100) + 50;
+    
+    // Aggiungi animazione di pulsazione
+    app.ticker.add(() => {
+        const time = performance.now() / 1000;
+        glow.scale.set(1 + Math.sin(time * 3) * 0.2);
+    });
+    
+    // Aggiungi al display e al gameState
+    app.stage.addChild(container);
+    gameState.energyPoints.set(id, container);
+    
+    return container;
+}
+
+// Aggiungi energia iniziale
+function spawnInitialEnergy() {
+    // Crea un numero iniziale di punti energia
+    for (let i = 0; i < MAX_ENERGY_POINTS / 2; i++) {
+        createEnergyPoint();
+    }
+    
+    // Continua a creare energia a intervalli
+    setInterval(() => {
+        if (gameState.energyPoints.size < MAX_ENERGY_POINTS) {
+            createEnergyPoint();
+        }
+    }, 1000);
+}
+
+// Funzione per controllare se un giocatore ha raccolto energia
+function checkEnergyCollection() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    gameState.energyPoints.forEach((energyPoint, id) => {
+        // Calcola distanza
+        const dx = player.x - energyPoint.x;
+        const dy = player.y - energyPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Se il giocatore tocca l'energia, la raccoglie
+        if (distance < player.size) {
+            collectEnergy(player, energyPoint, id);
+        }
+    });
+}
+
+// Raccogli energia e aggiorna il punteggio
+function collectEnergy(player, energyPoint, energyId) {
+    // Aggiorna punteggio
+    player.score += energyPoint.value;
+    gameState.scores.set(gameState.playerId, player.score);
+    
+    // Aumenta dimensione del giocatore (con limite massimo)
+    const newSize = Math.min(player.size + 1, MAX_SIZE);
+    updatePlayerSize(player, newSize);
+    
+    // Rimuovi il punto energia
+    app.stage.removeChild(energyPoint);
+    gameState.energyPoints.delete(energyId);
+    
+    // Crea un effetto visivo per la raccolta
+    createCollectEffect(energyPoint.x, energyPoint.y);
+    
+    // Invia l'aggiornamento al server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(msgpack.encode({
+            type: 'score',
+            id: gameState.playerId,
+            score: player.score,
+            size: player.size
+        }));
+    }
+}
+
+// Aggiorna la dimensione di un giocatore
+function updatePlayerSize(player, newSize) {
+    player.size = newSize;
+    
+    // Aggiorna dimensione visiva
+    // Nota: in una implementazione reale, dovremmo ricreare la grafica 
+    // invece di usare scale, per semplicità usiamo scale qui
+    const scaleRatio = newSize / INITIAL_SIZE;
+    player.scale.set(scaleRatio);
+    
+    // Aggiorna la posizione del nome
+    const nameText = player.children[2]; // Assume che il nome sia il terzo figlio
+    if (nameText) {
+        nameText.y = -newSize - 15;
+    }
+}
+
+// Crea effetto visivo per la raccolta di energia
+function createCollectEffect(x, y) {
+    // Crea particelle
+    for (let i = 0; i < 8; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(0xffff00);
+        particle.drawCircle(0, 0, 3);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        app.stage.addChild(particle);
+        
+        // Anima particelle in direzioni casuali
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 40 + 20;
+        const duration = Math.random() * 500 + 500;
+        
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration / 1000,
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+}
+
+// Controlla se un giocatore può mangiare un altro
+function checkPlayerCollisions() {
+    const player = gameState.players.get(gameState.playerId);
+    if (!player) return;
+    
+    gameState.players.forEach((otherPlayer, id) => {
+        // Salta il nostro giocatore
+        if (id === gameState.playerId) return;
+        
+        // Calcola distanza
+        const dx = player.x - otherPlayer.x;
+        const dy = player.y - otherPlayer.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Un giocatore può mangiare un altro se è almeno 30% più grande
+        if (distance < player.size && player.size > otherPlayer.size * 1.3) {
+            eatPlayer(player, otherPlayer, id);
+        }
+    });
+}
+
+// Funzione per "mangiare" un altro giocatore
+function eatPlayer(player, otherPlayer, otherId) {
+    // Incrementa punteggio in base alle dimensioni dell'avversario
+    const scoreGain = Math.round(otherPlayer.size * 0.5);
+    player.score += scoreGain;
+    
+    // Incrementa dimensione
+    const newSize = Math.min(player.size + Math.round(otherPlayer.size * 0.2), MAX_SIZE);
+    updatePlayerSize(player, newSize);
+    
+    // Crea effetto visivo
+    createEatEffect(otherPlayer.x, otherPlayer.y);
+    
+    // Invia messaggio al server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(msgpack.encode({
+            type: 'eat',
+            id: gameState.playerId,
+            target: otherId,
+            score: player.score,
+            size: player.size
+        }));
+    }
+}
+
+// Crea effetto visivo per mangiare un giocatore
+function createEatEffect(x, y) {
+    // Simile all'effetto di raccolta energia ma più grande
+    for (let i = 0; i < 15; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(0xff6600);
+        particle.drawCircle(0, 0, 5);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        app.stage.addChild(particle);
+        
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 60 + 30;
+        const duration = Math.random() * 700 + 300;
+        
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration / 1000,
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+}
 
 function connectWebSocket() {
     console.log("Tentativo di connessione WebSocket a:", WS_URL);
@@ -362,6 +610,49 @@ function connectWebSocket() {
     };
 }
 
+// Aggiorna la classifica dei giocatori
+function updateLeaderboard() {
+    const leaderboardElement = document.getElementById('leaderboard');
+    if (!leaderboardElement) return;
+    
+    // Crea un array di giocatori con punteggi
+    const players = [];
+    gameState.players.forEach((player, id) => {
+        players.push({
+            id: id.substring(0, 4), // Usa solo le prime 4 cifre dell'id
+            score: player.score || 0,
+            isLocal: id === gameState.playerId
+        });
+    });
+    
+    // Ordina i giocatori per punteggio
+    players.sort((a, b) => b.score - a.score);
+    
+    // Limita a massimo 5 giocatori
+    const topPlayers = players.slice(0, 5);
+    
+    // Svuota la classifica
+    leaderboardElement.innerHTML = '';
+    
+    // Aggiungi il titolo della classifica
+    const title = document.createElement('div');
+    title.className = 'leaderboard-title';
+    title.textContent = 'Classifica';
+    leaderboardElement.appendChild(title);
+    
+    // Aggiungi ogni giocatore alla classifica
+    topPlayers.forEach((player, index) => {
+        const item = document.createElement('div');
+        item.className = 'leaderboard-item';
+        if (player.isLocal) {
+            item.classList.add('local-player');
+        }
+        
+        item.textContent = `${index + 1}. ${player.id} - ${player.score}`;
+        leaderboardElement.appendChild(item);
+    });
+}
+
 // Avvia la connessione WebSocket
 connectWebSocket(); 
 
@@ -370,4 +661,40 @@ if (typeof anime !== 'undefined') {
     createBackgroundEffect();
 } else {
     console.log('anime.js non disponibile, effetti di sfondo disabilitati');
-} 
+}
+
+// Carica libreria GSAP
+if (typeof gsap === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js';
+    script.onload = () => {
+        console.log('GSAP caricato con successo');
+    };
+    document.head.appendChild(script);
+}
+
+// Avvia il gioco quando tutto è pronto
+window.addEventListener('load', () => {
+    console.log('Gioco inizializzato...');
+    spawnInitialEnergy();
+    
+    // Aggiungi il messaggio iniziale
+    const startMessage = document.createElement('div');
+    startMessage.id = 'start-message';
+    startMessage.innerHTML = `
+        <h2>Brawl Legends</h2>
+        <p>Raccogli i punti energia gialli per crescere<br>
+        Diventa abbastanza grande per mangiare gli altri giocatori!</p>
+        <div class="start-button">Inizia a Giocare</div>
+    `;
+    document.body.appendChild(startMessage);
+    
+    // Aggiungi evento click al pulsante
+    const startButton = startMessage.querySelector('.start-button');
+    startButton.addEventListener('click', () => {
+        startMessage.style.opacity = '0';
+        setTimeout(() => {
+            startMessage.remove();
+        }, 500);
+    });
+}); 
