@@ -20,7 +20,7 @@ function getEnvVar(name, defaultValue) {
 // Variabili di configurazione
 const PLAYER_SPEED = 5;
 const INTERPOLATION_FACTOR = 0.3;
-const WS_URL = getEnvVar('VITE_WS_URL', 'ws://localhost:3000');
+const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
 
 // Stato del gioco
 const gameState = {
@@ -135,6 +135,7 @@ let socket;
 let reconnectAttempts = 0;
 
 function connectWebSocket() {
+    console.log("Tentativo di connessione WebSocket a:", WS_URL);
     socket = new WebSocket(WS_URL);
     
     socket.binaryType = 'arraybuffer';
@@ -234,6 +235,19 @@ function connectWebSocket() {
     
     socket.onerror = (error) => {
         console.error('Errore WebSocket:', error);
+        // Mostra un messaggio più descrittivo
+        const errorBox = document.createElement('div');
+        errorBox.style.position = 'fixed';
+        errorBox.style.top = '10px';
+        errorBox.style.left = '50%';
+        errorBox.style.transform = 'translateX(-50%)';
+        errorBox.style.padding = '10px 20px';
+        errorBox.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
+        errorBox.style.color = 'white';
+        errorBox.style.borderRadius = '5px';
+        errorBox.style.zIndex = '1000';
+        errorBox.textContent = `Errore di connessione al server: ${WS_URL}. Verifica la console per dettagli.`;
+        document.body.appendChild(errorBox);
     };
 }
 
