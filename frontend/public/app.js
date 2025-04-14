@@ -56,9 +56,6 @@ const gameState = {
 
 // Inizializza il gioco quando il DOM è completamente caricato
 document.addEventListener('DOMContentLoaded', () => {
-    // Inizializza PixiJS solo quando necessario durante l'avvio del gioco
-    // Non creare ancora app, ma prepariamo la funzione da chiamare
-    
     // Inizializzazione del gioco quando l'utente inserisce il nome
     document.getElementById('start-button').addEventListener('click', () => {
         const username = document.getElementById('username-input').value.trim();
@@ -69,10 +66,26 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('game-container').style.display = 'block';
             
             // Inizializza PixiJS qui, quando game-container è visibile
-            initPixiJS();
+            const pixiInitialized = initPixiJS();
             
-            // Inizializza il gioco
-            initGame(username);
+            // Inizializza il gioco solo se PixiJS è stato inizializzato con successo
+            if (pixiInitialized) {
+                initGame(username);
+            } else {
+                // Mostra un messaggio di errore
+                const errorMessage = document.createElement('div');
+                errorMessage.className = 'game-message warning';
+                errorMessage.style.zIndex = '10000';
+                errorMessage.innerHTML = 'Non è stato possibile inizializzare il gioco. Prova ad aggiornare la pagina o utilizzare un browser più recente.';
+                document.body.appendChild(errorMessage);
+                
+                // Ripristina la schermata di login dopo un po'
+                setTimeout(() => {
+                    document.getElementById('game-container').style.display = 'none';
+                    document.getElementById('login-screen').style.display = 'flex';
+                    errorMessage.remove();
+                }, 5000);
+            }
         }
     });
 });
@@ -80,35 +93,54 @@ document.addEventListener('DOMContentLoaded', () => {
 // Funzione per inizializzare PixiJS
 function initPixiJS() {
     // Verifica che PIXI sia disponibile
-    if (!window.PIXI) {
+    if (typeof PIXI === 'undefined') {
         console.error("PIXI.js non è stato caricato correttamente");
         return;
     }
     
     try {
-        // Inizializza PixiJS
-        app = new PIXI.Application({
-            width: window.innerWidth - 20, // Usa quasi tutta la larghezza della finestra
-            height: window.innerHeight - 20, // Usa quasi tutta l'altezza della finestra
+        // Verifica che il browser supporti WebGL o Canvas
+        let type = "WebGL";
+        if (!PIXI.utils.isWebGLSupported()) {
+            type = "Canvas";
+            PIXI.utils.sayHello(type);
+        }
+        
+        // Inizializza PixiJS con autoDetectRenderer
+        const options = {
+            width: window.innerWidth - 20,
+            height: window.innerHeight - 20,
             backgroundColor: 0x0a0a0a,
             resolution: window.devicePixelRatio || 1,
             antialias: true
-        });
+        };
         
-        // Aggiungi stile al canvas per supportare meglio i diversi schermi
+        // Crea l'applicazione
+        app = new PIXI.Application(options);
+        
+        if (!app || !app.renderer) {
+            throw new Error("Impossibile creare l'applicazione PIXI");
+        }
+        
+        // Verifica che il renderer e la view siano stati creati
+        if (!app.renderer || !app.renderer.view) {
+            throw new Error("Il renderer PIXI non è stato inizializzato correttamente");
+        }
+        
+        // Aggiungi stile al canvas
         app.renderer.view.style.display = "block";
         app.renderer.view.style.margin = "0 auto";
         
-        // Ora siamo sicuri che il container esiste ed è visibile
+        // Ottieni il container e verifica che esista
         const container = document.getElementById('game-container');
         if (!container) {
-            console.error("Elemento game-container non trovato");
-            return;
+            throw new Error("Elemento game-container non trovato");
         }
         
-        container.appendChild(app.view);
+        // Aggiungi il canvas al container
+        container.appendChild(app.renderer.view);
         
-        // Aggiungi resize handler per adattarsi alle dimensioni dello schermo
+        // Aggiungi resize handler
         window.addEventListener('resize', () => {
             if (app && app.renderer) {
                 app.renderer.resize(window.innerWidth - 20, window.innerHeight - 20);
@@ -117,119 +149,143 @@ function initPixiJS() {
         
         // Configura il ticker di gioco
         app.ticker.add((delta) => {
-            updateMovement(delta);
-            interpolateOtherPlayers();
-            checkEnergyCollection();
-            checkPlayerCollisions();
-            updateHUD();
+            if (gameState.players.size > 0) {
+                updateMovement(delta);
+                interpolateOtherPlayers();
+                checkEnergyCollection();
+                checkPlayerCollisions();
+                updateHUD();
+            }
         });
         
-        console.log("PixiJS inizializzato con successo");
+        console.log("PixiJS inizializzato con successo:", type);
+        return true;
     } catch (error) {
         console.error("Errore durante l'inizializzazione di PixiJS:", error);
+        // In caso di errore, mostra un messaggio all'utente
+        showMessage('Errore di inizializzazione grafica', 'warning');
+        return false;
     }
 }
 
 // Funzione di inizializzazione del gioco
 function initGame(username) {
     // Assicurati che app sia inizializzato
-    if (!app) {
+    if (!app || !app.stage) {
         console.error("PixiJS non è stato inizializzato correttamente");
         return;
     }
     
-    // Crea il player locale
-    const player = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
-    // Imposta il nome personalizzato
-    player.children[2].text = username;
-    
-    // Aggiungi il player al gameState
-    gameState.players.set(gameState.playerId, player);
-    
-    // Inizia la connessione WebSocket
-    connectWebSocket();
-    
-    // Inizializza i punti energia
-    initEnergyPoints();
-    
-    // Aggiungi il messaggio di istruzioni
-    const startMessage = document.createElement('div');
-    startMessage.id = 'start-message';
-    startMessage.innerHTML = `
-        <h2>Brawl Legends</h2>
-        <p>Raccogli i punti energia gialli per crescere<br>
-        Diventa abbastanza grande per mangiare gli altri giocatori!</p>
-        <div class="start-button">Inizia a Giocare</div>
-    `;
-    document.body.appendChild(startMessage);
-    
-    // Aggiungi evento click al pulsante
-    const startButton = startMessage.querySelector('.start-button');
-    startButton.addEventListener('click', () => {
-        startMessage.style.opacity = '0';
-        setTimeout(() => {
-            startMessage.remove();
-        }, 500);
-    });
+    try {
+        // Crea il player locale
+        const player = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+        if (player) {
+            // Imposta il nome personalizzato
+            player.children[2].text = username;
+            
+            // Aggiungi il player al gameState
+            gameState.players.set(gameState.playerId, player);
+            
+            // Inizia la connessione WebSocket
+            connectWebSocket();
+            
+            // Inizializza i punti energia
+            initEnergyPoints();
+            
+            // Aggiungi il messaggio di istruzioni
+            const startMessage = document.createElement('div');
+            startMessage.id = 'start-message';
+            startMessage.innerHTML = `
+                <h2>Brawl Legends</h2>
+                <p>Raccogli i punti energia gialli per crescere<br>
+                Diventa abbastanza grande per mangiare gli altri giocatori!</p>
+                <div class="start-button">Inizia a Giocare</div>
+            `;
+            document.body.appendChild(startMessage);
+            
+            // Aggiungi evento click al pulsante
+            const startButton = startMessage.querySelector('.start-button');
+            startButton.addEventListener('click', () => {
+                startMessage.style.opacity = '0';
+                setTimeout(() => {
+                    startMessage.remove();
+                }, 500);
+            });
+        }
+    } catch (error) {
+        console.error("Errore durante l'inizializzazione del gioco:", error);
+        showMessage('Errore durante l\'inizializzazione del gioco', 'warning');
+    }
 }
 
 // Funzione per creare uno sprite giocatore
 function createPlayerSprite(playerId, isLocalPlayer = false, size = INITIAL_SIZE) {
-    const container = new PIXI.Container();
-    
-    // Corpo principale
-    const bodyColor = isLocalPlayer ? 0x00ff88 : 0xff4500;
-    const body = new PIXI.Graphics();
-    body.beginFill(bodyColor);
-    body.drawCircle(0, 0, size);
-    body.endFill();
-    
-    // Effetto glow
-    const glow = new PIXI.Graphics();
-    glow.beginFill(bodyColor, 0.3);
-    glow.drawCircle(0, 0, size + 10);
-    glow.endFill();
-    
-    // Nome giocatore (usa le prime 4 cifre dell'ID)
-    const playerName = new PIXI.Text(playerId.substring(0, 4), {
-        fontFamily: 'Arial',
-        fontSize: 12,
-        fill: 0xffffff,
-        align: 'center'
-    });
-    playerName.anchor.set(0.5);
-    playerName.y = -size - 15;
-    
-    // Aggiungi tutto al container
-    container.addChild(glow);
-    container.addChild(body);
-    container.addChild(playerName);
-    
-    // Posizione iniziale casuale (usa valori predefiniti se app.screen non è disponibile)
-    const screenWidth = (app && app.screen) ? app.screen.width : 1280;
-    const screenHeight = (app && app.screen) ? app.screen.height : 720;
-    
-    container.x = Math.random() * (screenWidth - 100) + 50;
-    container.y = Math.random() * (screenHeight - 100) + 50;
-    container.targetX = container.x;
-    container.targetY = container.y;
-    container.size = size; // Memorizziamo la dimensione corrente
-    container.score = 0;   // Punteggio iniziale
-    
-    // Aggiungi al display solo se app è inizializzato
-    if (app && app.stage) {
-        app.stage.addChild(container);
-        
-        // Aggiungi effetto "pulse" per il giocatore locale
-        if (isLocalPlayer) {
-            app.ticker.add(() => {
-                const time = performance.now() / 1000;
-                glow.scale.set(1 + Math.sin(time * 2) * 0.1);
-            });
-        }
+    // Verifica che PIXI sia disponibile e app sia inizializzato
+    if (typeof PIXI === 'undefined' || !app || !app.stage) {
+        console.error("PIXI.js o app non è stato inizializzato correttamente");
+        return null;
     }
     
-    return container;
+    try {
+        const container = new PIXI.Container();
+        
+        // Corpo principale
+        const bodyColor = isLocalPlayer ? 0x00ff88 : 0xff4500;
+        const body = new PIXI.Graphics();
+        body.beginFill(bodyColor);
+        body.drawCircle(0, 0, size);
+        body.endFill();
+        
+        // Effetto glow
+        const glow = new PIXI.Graphics();
+        glow.beginFill(bodyColor, 0.3);
+        glow.drawCircle(0, 0, size + 10);
+        glow.endFill();
+        
+        // Nome giocatore (usa le prime 4 cifre dell'ID)
+        const playerName = new PIXI.Text(playerId.substring(0, 4), {
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fill: 0xffffff,
+            align: 'center'
+        });
+        playerName.anchor.set(0.5);
+        playerName.y = -size - 15;
+        
+        // Aggiungi tutto al container
+        container.addChild(glow);
+        container.addChild(body);
+        container.addChild(playerName);
+        
+        // Posizione iniziale casuale (usa valori predefiniti se app.screen non è disponibile)
+        const screenWidth = (app && app.renderer && app.renderer.width) ? app.renderer.width : 1280;
+        const screenHeight = (app && app.renderer && app.renderer.height) ? app.renderer.height : 720;
+        
+        container.x = Math.random() * (screenWidth - 100) + 50;
+        container.y = Math.random() * (screenHeight - 100) + 50;
+        container.targetX = container.x;
+        container.targetY = container.y;
+        container.size = size; // Memorizziamo la dimensione corrente
+        container.score = 0;   // Punteggio iniziale
+        
+        // Aggiungi al display solo se app è inizializzato
+        if (app && app.stage) {
+            app.stage.addChild(container);
+            
+            // Aggiungi effetto "pulse" per il giocatore locale
+            if (isLocalPlayer) {
+                app.ticker.add(() => {
+                    const time = performance.now() / 1000;
+                    glow.scale.set(1 + Math.sin(time * 2) * 0.1);
+                });
+            }
+        }
+        
+        return container;
+    } catch (error) {
+        console.error("Errore durante la creazione dello sprite:", error);
+        return null;
+    }
 }
 
 // Imposta input da tastiera
@@ -247,6 +303,9 @@ window.addEventListener('keyup', (e) => {
 
 // Movimento WASD con predizione lato client
 function updateMovement(delta) {
+    // Verifica che app sia inizializzato
+    if (!app || !app.renderer) return;
+    
     const player = gameState.players.get(gameState.playerId);
     
     // Verifica che il player esista prima di accedere alle sue proprietà
@@ -268,8 +327,8 @@ function updateMovement(delta) {
     if (gameState.keys.d) player.x += speed * delta;
     
     // Limita movimento all'interno dello schermo usando valori predefiniti se app.screen non è disponibile
-    const screenWidth = (app && app.screen) ? app.screen.width : 1280;
-    const screenHeight = (app && app.screen) ? app.screen.height : 720;
+    const screenWidth = app.renderer.width || 1280;
+    const screenHeight = app.renderer.height || 720;
     
     player.x = Math.max(20, Math.min(screenWidth - 20, player.x));
     player.y = Math.max(20, Math.min(screenHeight - 20, player.y));
@@ -1026,19 +1085,39 @@ function showMessage(text, type = 'info') {
     
     document.body.appendChild(message);
     
-    // Animazione
-    gsap.fromTo(message, 
-        { y: 20, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.3 }
-    );
-    
-    // Rimuovi dopo un po'
-    setTimeout(() => {
-        gsap.to(message, {
-            y: -20, opacity: 0, duration: 0.3,
-            onComplete: () => message.remove()
-        });
-    }, 2000);
+    // Animazione con GSAP se disponibile
+    if (typeof gsap !== 'undefined') {
+        gsap.fromTo(message, 
+            { y: 20, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.3 }
+        );
+        
+        // Rimuovi dopo un po'
+        setTimeout(() => {
+            gsap.to(message, {
+                y: -20, opacity: 0, duration: 0.3,
+                onComplete: () => message.remove()
+            });
+        }, 2000);
+    } else {
+        // Fallback senza GSAP
+        message.style.opacity = '0';
+        message.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+            message.style.opacity = '1';
+            message.style.transform = 'translateY(0)';
+            message.style.transition = 'all 0.3s ease';
+        }, 10);
+        
+        // Rimuovi dopo un po'
+        setTimeout(() => {
+            message.style.opacity = '0';
+            message.style.transform = 'translateY(-20px)';
+            
+            setTimeout(() => message.remove(), 300);
+        }, 2000);
+    }
 }
 
 // Funzione per inizializzare i punti energia
