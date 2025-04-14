@@ -7,10 +7,20 @@ const app = new PIXI.Application({
 });
 document.getElementById('game-container').appendChild(app.view);
 
+// Funzione per ottenere variabili d'ambiente
+function getEnvVar(name, defaultValue) {
+    try {
+        // Tenta di usare import.meta.env se disponibile
+        return import.meta.env[name] || defaultValue;
+    } catch (e) {
+        return defaultValue;
+    }
+}
+
 // Variabili di configurazione
 const PLAYER_SPEED = 5;
 const INTERPOLATION_FACTOR = 0.3;
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
+const WS_URL = getEnvVar('VITE_WS_URL', 'ws://localhost:3000');
 
 // Stato del gioco
 const gameState = {
