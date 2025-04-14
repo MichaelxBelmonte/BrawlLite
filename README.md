@@ -31,8 +31,8 @@ Un gioco multiplayer in tempo reale per 10 giocatori con architettura distribuit
 
 1. **Clona il repository**:
    ```bash
-   git clone https://github.com/username/brawl-legends.git
-   cd brawl-legends
+   git clone https://github.com/MichaelxBelmonte/BrawlLite.git
+   cd BrawlLite
    ```
 
 2. **Setup Backend**:
@@ -95,6 +95,12 @@ npm run test:stress
 - Predizione lato client e interpolazione (30%)
 - Ottimizzazione della rete con compressione delta
 - Serializzazione efficiente con MessagePack
+
+## Vercel Deployment
+
+Vercel Configuration:
+- Root Directory: `frontend`
+- Output Directory: `public`
 
 ## Licenza
 
