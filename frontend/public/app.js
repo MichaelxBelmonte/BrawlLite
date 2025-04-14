@@ -13,12 +13,8 @@ const msgpack = window.msgpack5();
 
 // Funzione per ottenere variabili d'ambiente
 function getEnvVar(name, defaultValue) {
-    try {
-        // Tenta di usare import.meta.env se disponibile
-        return import.meta.env[name] || defaultValue;
-    } catch (e) {
-        return defaultValue;
-    }
+    // Usa direttamente il valore di default senza try/catch per import.meta
+    return defaultValue;
 }
 
 // Variabili di configurazione
@@ -64,6 +60,37 @@ const gameState = {
     lastPosition: { x: 0, y: 0 },
     projectiles: []
 };
+
+// Inizializzazione del gioco quando l'utente inserisce il nome
+document.getElementById('start-button').addEventListener('click', () => {
+    const username = document.getElementById('username-input').value.trim();
+    if (username) {
+        // Nascondi schermata di login
+        document.getElementById('login-screen').style.display = 'none';
+        // Mostra il contenitore di gioco
+        document.getElementById('game-container').style.display = 'block';
+        
+        // Inizializza il gioco
+        initGame(username);
+    }
+});
+
+// Funzione di inizializzazione del gioco
+function initGame(username) {
+    // Crea il player locale
+    const player = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+    // Imposta il nome personalizzato
+    player.children[2].text = username;
+    
+    // Aggiungi il player al gameState
+    gameState.players.set(gameState.playerId, player);
+    
+    // Inizia la connessione WebSocket
+    connectWebSocket();
+    
+    // Inizializza i punti energia
+    initEnergyPoints();
+}
 
 // Funzione per creare uno sprite giocatore
 function createPlayerSprite(playerId, isLocalPlayer = false, size = INITIAL_SIZE) {
@@ -1375,4 +1402,61 @@ function showMessage(text, type = 'info') {
             onComplete: () => message.remove()
         });
     }, 2000);
+}
+
+// Funzione per inizializzare i punti energia
+function initEnergyPoints() {
+    // Crea punti energia iniziali
+    for (let i = 0; i < MAX_ENERGY_POINTS; i++) {
+        spawnEnergyPoint();
+    }
+    
+    // Imposta un timer per generare nuovi punti energia
+    setInterval(() => {
+        if (gameState.energyPoints.size < MAX_ENERGY_POINTS) {
+            spawnEnergyPoint();
+        }
+    }, 2000);
+}
+
+// Crea un nuovo punto energia
+function spawnEnergyPoint() {
+    const id = crypto.randomUUID();
+    const x = Math.random() * (app.screen.width - 100) + 50;
+    const y = Math.random() * (app.screen.height - 100) + 50;
+    
+    // Crea lo sprite del punto energia
+    const energyPoint = new PIXI.Graphics();
+    energyPoint.beginFill(0x00ffff);
+    energyPoint.drawCircle(0, 0, 8);
+    energyPoint.endFill();
+    
+    // Aggiungi un effetto glow
+    const glow = new PIXI.Graphics();
+    glow.beginFill(0x00ffff, 0.3);
+    glow.drawCircle(0, 0, 12);
+    glow.endFill();
+    
+    // Crea un container
+    const container = new PIXI.Container();
+    container.addChild(glow);
+    container.addChild(energyPoint);
+    container.x = x;
+    container.y = y;
+    container.value = ENERGY_VALUE;
+    
+    // Aggiungi al gioco
+    app.stage.addChild(container);
+    gameState.energyPoints.set(id, container);
+    
+    // Aggiungi animazione pulse
+    gsap.to(container.scale, {
+        x: 1.2,
+        y: 1.2,
+        duration: 0.8,
+        repeat: -1,
+        yoyo: true
+    });
+    
+    return container;
 } 
