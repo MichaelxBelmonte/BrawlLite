@@ -23,7 +23,7 @@ function getEnvVar(name, defaultValue) {
 // Variabili di configurazione
 const PLAYER_SPEED = 5;
 const INTERPOLATION_FACTOR = 0.3;
-const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com:10000');
+const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
 
 // Stato del gioco
 const gameState = {
