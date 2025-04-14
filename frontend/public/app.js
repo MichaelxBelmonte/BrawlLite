@@ -56,6 +56,15 @@ const gameState = {
 
 // Inizializza il gioco quando il DOM è completamente caricato
 document.addEventListener('DOMContentLoaded', () => {
+    // Verifica che PIXI sia stato caricato correttamente
+    if (typeof PIXI === 'undefined') {
+        console.error("PIXI.js non è stato caricato. Verifica la connessione internet e ricarica la pagina.");
+        alert("Errore: Impossibile caricare la libreria grafica. Verifica la connessione internet e ricarica la pagina.");
+        return;
+    } else {
+        console.log("PIXI.js caricato, versione:", PIXI.VERSION);
+    }
+    
     // Inizializzazione del gioco quando l'utente inserisce il nome
     document.getElementById('start-button').addEventListener('click', () => {
         const username = document.getElementById('username-input').value.trim();
@@ -99,20 +108,15 @@ function initPixiJS() {
     }
     
     try {
-        // Verifica che il browser supporti WebGL o Canvas
-        let type = "WebGL";
-        if (!PIXI.utils.isWebGLSupported()) {
-            type = "Canvas";
-            PIXI.utils.sayHello(type);
-        }
-        
         // Inizializza PixiJS con autoDetectRenderer
         const options = {
             width: window.innerWidth - 20,
             height: window.innerHeight - 20,
             backgroundColor: 0x0a0a0a,
             resolution: window.devicePixelRatio || 1,
-            antialias: true
+            antialias: true,
+            // In PixiJS v7+ non è necessario specificare esplicitamente WebGL/Canvas
+            // il renderer verrà automaticamente scelto in base alle capacità del browser
         };
         
         // Crea l'applicazione
@@ -158,7 +162,7 @@ function initPixiJS() {
             }
         });
         
-        console.log("PixiJS inizializzato con successo:", type);
+        console.log("PixiJS inizializzato con successo, tipo renderer:", app.renderer.type);
         return true;
     } catch (error) {
         console.error("Errore durante l'inizializzazione di PixiJS:", error);
