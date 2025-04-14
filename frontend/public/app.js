@@ -92,6 +92,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Funzione di inizializzazione del gioco
 function initGame(username) {
+    // Assicurati che app sia inizializzato
+    if (!app) {
+        console.error("PixiJS non è stato inizializzato correttamente");
+        return;
+    }
+    
     // Crea il player locale
     const player = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
     // Imposta il nome personalizzato
@@ -139,23 +145,28 @@ function createPlayerSprite(playerId, isLocalPlayer = false, size = INITIAL_SIZE
     container.addChild(body);
     container.addChild(playerName);
     
-    // Posizione iniziale casuale
-    container.x = Math.random() * (app.screen.width - 100) + 50;
-    container.y = Math.random() * (app.screen.height - 100) + 50;
+    // Posizione iniziale casuale (usa valori predefiniti se app.screen non è disponibile)
+    const screenWidth = (app && app.screen) ? app.screen.width : 1280;
+    const screenHeight = (app && app.screen) ? app.screen.height : 720;
+    
+    container.x = Math.random() * (screenWidth - 100) + 50;
+    container.y = Math.random() * (screenHeight - 100) + 50;
     container.targetX = container.x;
     container.targetY = container.y;
     container.size = size; // Memorizziamo la dimensione corrente
     container.score = 0;   // Punteggio iniziale
     
-    // Aggiungi al display
-    app.stage.addChild(container);
-    
-    // Aggiungi effetto "pulse" per il giocatore locale
-    if (isLocalPlayer) {
-        app.ticker.add(() => {
-            const time = performance.now() / 1000;
-            glow.scale.set(1 + Math.sin(time * 2) * 0.1);
-        });
+    // Aggiungi al display solo se app è inizializzato
+    if (app && app.stage) {
+        app.stage.addChild(container);
+        
+        // Aggiungi effetto "pulse" per il giocatore locale
+        if (isLocalPlayer) {
+            app.ticker.add(() => {
+                const time = performance.now() / 1000;
+                glow.scale.set(1 + Math.sin(time * 2) * 0.1);
+            });
+        }
     }
     
     return container;
@@ -479,9 +490,6 @@ function updateLeaderboard() {
     });
 }
 
-// Avvia la connessione WebSocket
-connectWebSocket(); 
-
 // Inizializza gli effetti di sfondo (se anime.js è disponibile)
 if (typeof anime !== 'undefined') {
     createBackgroundEffect();
@@ -502,7 +510,6 @@ if (typeof gsap === 'undefined') {
 // Avvia il gioco quando tutto è pronto
 window.addEventListener('load', () => {
     console.log('Gioco inizializzato...');
-    spawnInitialEnergy();
     
     // Aggiungi il messaggio iniziale
     const startMessage = document.createElement('div');
@@ -990,6 +997,12 @@ function showMessage(text, type = 'info') {
 
 // Funzione per inizializzare i punti energia
 function initEnergyPoints() {
+    // Verifica che app sia inizializzato
+    if (!app || !app.stage) {
+        console.error("PixiJS non è stato inizializzato correttamente");
+        return;
+    }
+    
     // Crea punti energia iniziali
     for (let i = 0; i < MAX_ENERGY_POINTS; i++) {
         spawnEnergyPoint();
@@ -1005,6 +1018,12 @@ function initEnergyPoints() {
 
 // Crea un nuovo punto energia
 function spawnEnergyPoint() {
+    // Verifica che app sia inizializzato
+    if (!app || !app.stage || !app.screen) {
+        console.error("PixiJS non è stato inizializzato correttamente");
+        return null;
+    }
+    
     const id = crypto.randomUUID();
     const x = Math.random() * (app.screen.width - 100) + 50;
     const y = Math.random() * (app.screen.height - 100) + 50;
