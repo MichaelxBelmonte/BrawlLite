@@ -4,6 +4,240 @@ let socket;
 let reconnectAttempts = 0;
 const msgpack = window.msgpack5();
 
+// Configurazione delle dimensioni del mondo di gioco
+const WORLD_CONFIG = {
+  width: 3000,
+  height: 3000,
+  minZoom: 0.5,  // Zoom minimo (più lontano)
+  maxZoom: 1.2,  // Zoom massimo (più vicino)
+  padding: 50    // Padding dai bordi
+};
+
+// Estensione della classe DynamicCamera con funzionalità avanzate
+class DynamicCamera {
+  constructor() {
+    this.x = 0;
+    this.y = 0;
+    this.targetX = 0;
+    this.targetY = 0;
+    this.zoom = 1;
+    this.targetZoom = 1;
+    this.deadZone = 50;
+    this.smoothFactor = 0.1;
+    this.zoomSmoothFactor = 0.05;
+    this.container = null;
+    this.worldContainer = null;
+    
+    // Configurazione avanzata
+    this.advancedConfig = {
+      maxPlayersForZoom: 8,
+      zoomDecayFactor: 0.93,
+      playerWeight: 0.7,
+      mapWeight: 0.3,
+      smoothTransition: {
+        position: 0.08,
+        zoom: 0.05
+      }
+    };
+    
+    // Limiti della camera
+    this.bounds = {
+      left: 0,
+      top: 0,
+      right: WORLD_CONFIG.width,
+      bottom: WORLD_CONFIG.height
+    };
+  }
+  
+  // Inizializza la camera con i container PIXI.js
+  init(app) {
+    if (!app || !app.stage) {
+      console.error("Impossibile inizializzare la camera: app non disponibile");
+      return false;
+    }
+    
+    // Crea un container principale
+    this.container = new PIXI.Container();
+    app.stage.addChild(this.container);
+    
+    // Crea un container per il mondo di gioco
+    this.worldContainer = new PIXI.Container();
+    this.container.addChild(this.worldContainer);
+    
+    // Container per l'interfaccia (non influenzato dalla camera)
+    this.uiContainer = new PIXI.Container();
+    app.stage.addChild(this.uiContainer);
+    
+    // Inizializza al centro del mondo
+    this.x = WORLD_CONFIG.width / 2;
+    this.y = WORLD_CONFIG.height / 2;
+    this.targetX = this.x;
+    this.targetY = this.y;
+    
+    console.log("Camera dinamica avanzata inizializzata");
+    return true;
+  }
+  
+  // Calcola lo zoom ottimale basato sulla distribuzione dei giocatori
+  calculateOptimalZoom(players) {
+    // Se non ci sono sufficienti giocatori, usa la formula semplice
+    if (!players || players.size <= 1) {
+      return WORLD_CONFIG.maxZoom;
+    }
+    
+    // Raccogli le posizioni di tutti i giocatori
+    const playerPositions = Array.from(players.values()).map(p => ({x: p.x, y: p.y}));
+    
+    // Calcola i confini del gruppo di giocatori
+    const bounds = this.calculatePlayersBounds(playerPositions);
+    
+    // Se i confini non sono validi, usa lo zoom predefinito
+    if (bounds.minX === Infinity || bounds.maxX === -Infinity) {
+      return WORLD_CONFIG.maxZoom;
+    }
+    
+    // Calcola le dimensioni dei confini
+    const screenAspect = window.innerWidth / window.innerHeight;
+    const boundsWidth = bounds.maxX - bounds.minX;
+    const boundsHeight = bounds.maxY - bounds.minY;
+    
+    // Evita divisione per zero
+    if (boundsWidth === 0 || boundsHeight === 0) {
+      return WORLD_CONFIG.maxZoom;
+    }
+    
+    // Calcola lo zoom basato sui confini del gruppo di giocatori e sulla mappa
+    const zoomX = (window.innerWidth - 100) / (boundsWidth * this.advancedConfig.playerWeight + WORLD_CONFIG.width * this.advancedConfig.mapWeight);
+    const zoomY = (window.innerHeight - 100) / (boundsHeight * this.advancedConfig.playerWeight + WORLD_CONFIG.height * this.advancedConfig.mapWeight);
+    
+    // Usa il minore dei due zoom e applica il fattore di decadimento per più giocatori
+    const baseZoom = Math.min(zoomX, zoomY);
+    const adjustedZoom = baseZoom * Math.pow(this.advancedConfig.zoomDecayFactor, Math.min(players.size, this.advancedConfig.maxPlayersForZoom));
+    
+    // Limita lo zoom ai valori min/max
+    return Math.max(WORLD_CONFIG.minZoom, Math.min(WORLD_CONFIG.maxZoom, adjustedZoom));
+  }
+  
+  // Calcola i confini per un gruppo di posizioni
+  calculatePlayersBounds(positions) {
+    if (!positions || positions.length === 0) {
+      return {
+        minX: 0,
+        maxX: WORLD_CONFIG.width,
+        minY: 0,
+        maxY: WORLD_CONFIG.height
+      };
+    }
+    
+    return positions.reduce((acc, pos) => ({
+      minX: Math.min(acc.minX, pos.x),
+      maxX: Math.max(acc.maxX, pos.x),
+      minY: Math.min(acc.minY, pos.y),
+      maxY: Math.max(acc.maxY, pos.y)
+    }), {
+      minX: Infinity,
+      maxX: -Infinity,
+      minY: Infinity,
+      maxY: -Infinity
+    });
+  }
+  
+  // Aggiorna lo zoom usando l'algoritmo avanzato
+  updateAdvancedZoom(players, localPlayer) {
+    if (!players || !localPlayer) return;
+    
+    // Calcola lo zoom ottimale
+    const optimalZoom = this.calculateOptimalZoom(players);
+    
+    // Considera anche la dimensione del giocatore locale
+    const sizeZoomFactor = 1 - localPlayer.size / 300 * 0.3;
+    
+    // Prendi il minore dei due fattori
+    this.targetZoom = Math.min(optimalZoom, sizeZoomFactor * WORLD_CONFIG.maxZoom);
+  }
+  
+  // Overload di updateZoom per compatibilità
+  updateZoom(playerCount, playerSize) {
+    // Fallback al metodo originale se non ci sono giocatori
+    if (!gameState.players || gameState.players.size === 0) {
+      // Formula logaritmica per scalare lo zoom con il numero di giocatori
+      let newZoom = 1 - Math.log(Math.max(playerCount, 1) + 1) * 0.1;
+      
+      // Considera anche la dimensione del giocatore
+      const sizeZoomFactor = 1 - playerSize / 300 * 0.3;
+      
+      // Prendi il minore dei due fattori
+      newZoom = Math.min(newZoom, sizeZoomFactor);
+      
+      // Limita lo zoom ai valori min/max
+      this.targetZoom = Math.max(WORLD_CONFIG.minZoom, 
+                          Math.min(WORLD_CONFIG.maxZoom, newZoom));
+    } else {
+      // Usa il metodo avanzato se ci sono giocatori
+      const localPlayer = gameState.players.get(gameState.playerId);
+      this.updateAdvancedZoom(gameState.players, localPlayer);
+    }
+  }
+  
+  // Aggiorna la camera con interpolazione fluida
+  update(delta) {
+    if (!this.worldContainer) return;
+    
+    // Usa i fattori di smooth dalla configurazione avanzata se disponibili
+    const positionSmooth = this.advancedConfig.smoothTransition.position || this.smoothFactor;
+    const zoomSmooth = this.advancedConfig.smoothTransition.zoom || this.zoomSmoothFactor;
+    
+    // Interpolazione fluida della posizione
+    this.x += (this.targetX - this.x) * positionSmooth * delta;
+    this.y += (this.targetY - this.y) * positionSmooth * delta;
+    
+    // Interpolazione più lenta dello zoom per evitare cambi bruschi
+    this.zoom += (this.targetZoom - this.zoom) * zoomSmooth * delta;
+    
+    // Applica trasformazioni al container del mondo
+    this.worldContainer.position.x = app.renderer.width / 2 - this.x * this.zoom;
+    this.worldContainer.position.y = app.renderer.height / 2 - this.y * this.zoom;
+    this.worldContainer.scale.set(this.zoom);
+  }
+  
+  // Aggiungi un oggetto al mondo (influenzato dalla camera)
+  addToWorld(object) {
+    if (this.worldContainer && object) {
+      this.worldContainer.addChild(object);
+      return true;
+    }
+    return false;
+  }
+  
+  // Aggiungi un oggetto all'UI (non influenzato dalla camera)
+  addToUI(object) {
+    if (this.uiContainer && object) {
+      this.uiContainer.addChild(object);
+      return true;
+    }
+    return false;
+  }
+  
+  // Converte coordinate mondo in coordinate schermo
+  worldToScreen(worldX, worldY) {
+    return {
+      x: app.renderer.width / 2 + (worldX - this.x) * this.zoom,
+      y: app.renderer.height / 2 + (worldY - this.y) * this.zoom
+    };
+  }
+  
+  // Converte coordinate schermo in coordinate mondo
+  screenToWorld(screenX, screenY) {
+    return {
+      x: this.x + (screenX - app.renderer.width / 2) / this.zoom,
+      y: this.y + (screenY - app.renderer.height / 2) / this.zoom
+    };
+  }
+}
+
+// Aggiungi la camera al gameState
+gameState.camera = new DynamicCamera();
+
 // Funzione per ottenere variabili d'ambiente
 function getEnvVar(name, defaultValue) {
     // Usa direttamente il valore di default senza try/catch per import.meta
@@ -51,8 +285,755 @@ const gameState = {
     },
     lastUpdate: Date.now(),
     lastPosition: { x: 0, y: 0 },
-    projectiles: []
+    projectiles: [],
+    lastServerMessage: Date.now(),
+    pingInterval: null,
+    offlineIntervals: [],
+    contextLost: false,
+    contextLostTime: 0,
+    recoveryInterval: null,
+    joystickData: {
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        strength: 0
+    }
 };
+
+// Configurazione mobile
+const MOBILE_CONFIG = {
+  joystickSize: 120,
+  buttonSize: 80,
+  controlsOpacity: 0.6,
+  inactivityTimeout: 3000 // ms prima che i controlli svaniscano quando inattivi
+};
+
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+         (window.innerWidth <= 800 && window.innerHeight <= 600);
+}
+
+function setupMobileControls() {
+  if (!isMobileDevice()) return false;
+  
+  showMessage("Controlli touch attivati", "info");
+  
+  // Creare il joystick container
+  const joystickContainer = document.createElement('div');
+  joystickContainer.id = 'joystick-container';
+  joystickContainer.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: ${MOBILE_CONFIG.joystickSize}px;
+    height: ${MOBILE_CONFIG.joystickSize}px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border: 2px solid rgba(0, 255, 136, 0.3);
+    z-index: 1000;
+    backdrop-filter: blur(2px);
+    opacity: ${MOBILE_CONFIG.controlsOpacity};
+    transition: opacity 0.3s;
+    touch-action: none;
+  `;
+  
+  // Creare il joystick stick
+  const joystickStick = document.createElement('div');
+  joystickStick.id = 'joystick-stick';
+  joystickStick.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: ${MOBILE_CONFIG.joystickSize * 0.4}px;
+    height: ${MOBILE_CONFIG.joystickSize * 0.4}px;
+    background: rgba(0, 255, 136, 0.5);
+    border-radius: 50%;
+    border: 2px solid rgba(0, 255, 136, 0.7);
+    transition: background 0.2s;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+  `;
+  
+  joystickContainer.appendChild(joystickStick);
+  document.body.appendChild(joystickContainer);
+  
+  // Creare i pulsanti delle abilità
+  const buttonContainer = document.createElement('div');
+  buttonContainer.id = 'button-container';
+  buttonContainer.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    z-index: 1000;
+    align-items: flex-end;
+    opacity: ${MOBILE_CONFIG.controlsOpacity};
+    transition: opacity 0.3s;
+  `;
+  
+  // Primo pulsante: abilità
+  const abilityButton = document.createElement('div');
+  abilityButton.id = 'ability-button';
+  abilityButton.style.cssText = `
+    width: ${MOBILE_CONFIG.buttonSize}px;
+    height: ${MOBILE_CONFIG.buttonSize}px;
+    background: rgba(0, 150, 255, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(0, 150, 255, 0.7);
+    font-size: 18px;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+    touch-action: none;
+  `;
+  abilityButton.innerText = 'A';
+  
+  // Secondo pulsante: zoom out
+  const zoomButton = document.createElement('div');
+  zoomButton.id = 'zoom-button';
+  zoomButton.style.cssText = `
+    width: ${MOBILE_CONFIG.buttonSize * 0.8}px;
+    height: ${MOBILE_CONFIG.buttonSize * 0.8}px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    font-size: 18px;
+    color: white;
+    touch-action: none;
+  `;
+  zoomButton.innerText = '👁️';
+  
+  buttonContainer.appendChild(abilityButton);
+  buttonContainer.appendChild(zoomButton);
+  document.body.appendChild(buttonContainer);
+  
+  // Variabili per il joystick
+  let joystickActive = false;
+  let joystickMoved = false;
+  let joystickCenterX, joystickCenterY;
+  const maxDistance = MOBILE_CONFIG.joystickSize * 0.4;
+  let inactivityTimer;
+  
+  // Funzione per aggiornare l'opacità dei controlli
+  function resetControlsOpacity() {
+    clearTimeout(inactivityTimer);
+    joystickContainer.style.opacity = MOBILE_CONFIG.controlsOpacity;
+    buttonContainer.style.opacity = MOBILE_CONFIG.controlsOpacity;
+    
+    inactivityTimer = setTimeout(() => {
+      if (!joystickActive) {
+        joystickContainer.style.opacity = '0.2';
+        buttonContainer.style.opacity = '0.2';
+      }
+    }, MOBILE_CONFIG.inactivityTimeout);
+  }
+  
+  // Inizializzazione del joystick
+  function initJoystick() {
+    joystickCenterX = MOBILE_CONFIG.joystickSize / 2;
+    joystickCenterY = MOBILE_CONFIG.joystickSize / 2;
+    
+    // Eventi touch per il joystick
+    joystickContainer.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      joystickActive = true;
+      resetControlsOpacity();
+      updateJoystickPosition(e);
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (joystickActive) {
+        e.preventDefault();
+        updateJoystickPosition(e);
+      }
+    });
+    
+    document.addEventListener('touchend', (e) => {
+      if (joystickActive) {
+        joystickActive = false;
+        joystickMoved = false;
+        resetControlsOpacity();
+        
+        // Ripristina posizione joystick
+        joystickStick.style.transform = 'translate(-50%, -50%)';
+        
+        // Resetta input movimento
+        gameState.input.horizontalInput = 0;
+        gameState.input.verticalInput = 0;
+      }
+    });
+    
+    // Funzione per aggiornare la posizione del joystick
+    function updateJoystickPosition(e) {
+      const touch = e.touches[0];
+      const rect = joystickContainer.getBoundingClientRect();
+      const touchX = touch.clientX - rect.left;
+      const touchY = touch.clientY - rect.top;
+      
+      // Calcola distanza dal centro
+      let dx = touchX - joystickCenterX;
+      let dy = touchY - joystickCenterY;
+      let distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Limita distanza
+      if (distance > maxDistance) {
+        dx = (dx / distance) * maxDistance;
+        dy = (dy / distance) * maxDistance;
+        distance = maxDistance;
+      }
+      
+      // Aggiorna posizione visiva
+      joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      
+      // Invia input di movimento normalizzato
+      gameState.input.horizontalInput = dx / maxDistance;
+      gameState.input.verticalInput = dy / maxDistance;
+      
+      joystickMoved = true;
+    }
+    
+    // Abilità e zoom
+    abilityButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      resetControlsOpacity();
+      abilityButton.style.background = 'rgba(0, 150, 255, 0.7)';
+      abilityButton.style.transform = 'scale(0.9)';
+      
+      // Attiva abilità del giocatore
+      if (gameState.localPlayer) {
+        activateAbility('speed', gameState.localPlayer);
+      }
+    });
+    
+    abilityButton.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      abilityButton.style.background = 'rgba(0, 150, 255, 0.3)';
+      abilityButton.style.transform = 'scale(1)';
+    });
+    
+    zoomButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      resetControlsOpacity();
+      zoomButton.style.background = 'rgba(255, 255, 255, 0.4)';
+      zoomButton.style.transform = 'scale(0.9)';
+      
+      // Cambia livello di zoom
+      if (gameState.camera) {
+        gameState.camera.zoomOut(0.7);
+        setTimeout(() => {
+          gameState.camera.resetZoom();
+        }, 2000);
+      }
+    });
+    
+    zoomButton.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      zoomButton.style.background = 'rgba(255, 255, 255, 0.2)';
+      zoomButton.style.transform = 'scale(1)';
+    });
+  }
+  
+  // Aggiusta layout in base all'orientamento
+  function adjustLayoutForOrientation() {
+    if (window.innerWidth > window.innerHeight) {
+      // Landscape
+      joystickContainer.style.bottom = '20px';
+      joystickContainer.style.left = '20px';
+      buttonContainer.style.bottom = '20px';
+      buttonContainer.style.right = '20px';
+    } else {
+      // Portrait
+      joystickContainer.style.bottom = '20px';
+      joystickContainer.style.left = '20px';
+      buttonContainer.style.bottom = '20px';
+      buttonContainer.style.right = '20px';
+    }
+  }
+  
+  // Gestisci cambiamenti di orientamento
+  window.addEventListener('resize', adjustLayoutForOrientation);
+  window.addEventListener('orientationchange', adjustLayoutForOrientation);
+  
+  // Inizializza
+  initJoystick();
+  adjustLayoutForOrientation();
+  resetControlsOpacity();
+  
+  return true;
+}
+
+// Funzione di setup dei controlli (tastiera + mobile)
+function setupControls() {
+  // Inizializza lo stato degli input
+  gameState.keys = {
+    w: false,
+    a: false,
+    s: false,
+    d: false,
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false
+  };
+  
+  // Supporto joystick virtuale
+  gameState.joystickData = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    strength: 0
+  };
+  
+  // Controlla se ci sono controlli touch configurati
+  const hasTouchControls = setupMobileControls();
+  
+  // Aggiungi sempre eventi tastiera per supportare anche dispositivi ibridi
+  window.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if (key in gameState.keys) {
+      gameState.keys[key] = true;
+    }
+    
+    // Scorciatoie rapide per abilità
+    if (e.key === '1' || e.key === ' ') {
+      activateAbility();
+    }
+  });
+  
+  window.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    if (key in gameState.keys) {
+      gameState.keys[key] = false;
+    }
+  });
+  
+  // Aggiungi listener per pause quando l'utente cambia tab
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // Reset dello stato input quando la pagina non è visibile
+      for (let key in gameState.keys) {
+        gameState.keys[key] = false;
+      }
+      
+      // Reset joystick data
+      gameState.joystickData = {
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        strength: 0
+      };
+    }
+  });
+  
+  console.log(`Controlli configurati: ${hasTouchControls ? 'touch + tastiera' : 'solo tastiera'}`);
+}
+
+// Inizializza gameState.joystickData
+gameState.joystickData = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  strength: 0
+};
+
+// Validazione del movimento lato client
+function validateMovement(x, y, prevX, prevY) {
+  // Calcola distanza
+  const dx = x - prevX;
+  const dy = y - prevY;
+  const distance = Math.sqrt(dx*dx + dy*dy);
+  
+  // Velocità massima consentita (pixel per frame)
+  const maxSpeed = 15;
+  
+  // Se il movimento è troppo grande, limita la distanza
+  if (distance > maxSpeed) {
+    const ratio = maxSpeed / distance;
+    return {
+      x: prevX + dx * ratio,
+      y: prevY + dy * ratio,
+      limited: true
+    };
+  }
+  
+  return { x, y, limited: false };
+}
+
+// Predizione stato client
+function predictClientState(player, inputs) {
+  if (!player) return null;
+  
+  const newState = {
+    x: player.x,
+    y: player.y,
+    size: player.size,
+    score: player.score
+  };
+  
+  // Calcola velocità in base alla dimensione (più grande = più lento)
+  const speedFactor = Math.max(0.5, 1 - (player.size / 500));
+  const baseSpeed = PLAYER_SPEED * speedFactor;
+  
+  // Movimento da tastiera
+  if (inputs.keys.w || inputs.joystickData.up) {
+    newState.y -= baseSpeed * (inputs.joystickData.strength || 1);
+  }
+  if (inputs.keys.s || inputs.joystickData.down) {
+    newState.y += baseSpeed * (inputs.joystickData.strength || 1);
+  }
+  if (inputs.keys.a || inputs.joystickData.left) {
+    newState.x -= baseSpeed * (inputs.joystickData.strength || 1);
+  }
+  if (inputs.keys.d || inputs.joystickData.right) {
+    newState.x += baseSpeed * (inputs.joystickData.strength || 1);
+  }
+  
+  // Valida il movimento
+  const validatedMovement = validateMovement(newState.x, newState.y, player.x, player.y);
+  newState.x = validatedMovement.x;
+  newState.y = validatedMovement.y;
+  
+  return newState;
+}
+
+// Interpolazione più fluida per gli altri giocatori
+function interpolateOtherPlayers(delta) {
+  gameState.players.forEach((player, id) => {
+    if (id !== gameState.playerId) {
+      // Calcola fattore di smooth (più pesante = più lento)
+      const sizeFactor = Math.max(0.5, 1 - (player.size / 500));
+      
+      // Interpolazione senza scatti
+      const LERP_FACTOR = 0.2 * sizeFactor;
+      
+      if (player.targetX !== undefined && player.targetY !== undefined) {
+        player.x += (player.targetX - player.x) * LERP_FACTOR * delta;
+        player.y += (player.targetY - player.y) * LERP_FACTOR * delta;
+      }
+    }
+  });
+}
+
+// Modifica la funzione di connessione WebSocket per usare le nuove ottimizzazioni
+function connectWebSocket() {
+  const wsUrl = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
+  
+  console.log(`Tentativo di connessione a: ${wsUrl}`);
+  
+  socket = new WebSocket(wsUrl);
+  
+  // Gestione degli eventi socket
+  socket.onopen = function() {
+    console.log('WebSocket connesso');
+    
+    // Resetta contatore tentativi di connessione
+    gameState.connectionAttempts = 0;
+    
+    // Inizializza ping periodico
+    if (gameState.pingInterval) {
+      clearInterval(gameState.pingInterval);
+    }
+    
+    gameState.pingInterval = setInterval(() => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        sendToServer({
+          type: 'ping',
+          id: gameState.playerId,
+          timestamp: Date.now()
+        });
+      }
+    }, 30000); // Ping ogni 30 secondi
+    
+    // Invia messaggio join
+    const player = gameState.players.get(gameState.playerId);
+    
+    if (player) {
+      sendToServer({
+        type: 'join',
+        id: gameState.playerId,
+        name: player.children && player.children[2] ? player.children[2].text : 'Player',
+        x: player.x,
+        y: player.y,
+        size: player.size || INITIAL_SIZE,
+        timestamp: Date.now()
+      });
+    }
+  };
+  
+  socket.onclose = function(event) {
+    console.log('WebSocket disconnesso', event.code, event.reason);
+    
+    // Ferma il ping interval
+    if (gameState.pingInterval) {
+      clearInterval(gameState.pingInterval);
+      gameState.pingInterval = null;
+    }
+    
+    // Attiva la modalità offline in dev o tenta di riconnettere
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      console.log('Ambiente locale rilevato, attivazione modalità offline');
+      enableOfflineMode();
+    } else {
+      // Tenta di riconnettere dopo un ritardo
+      gameState.connectionAttempts = (gameState.connectionAttempts || 0) + 1;
+      
+      // Calcola ritardo esponenziale (max 30 secondi)
+      const delay = Math.min(1000 * Math.pow(1.5, gameState.connectionAttempts - 1), 30000);
+      
+      console.log(`Tentativo di riconnessione in ${delay/1000} secondi...`);
+      setTimeout(connectWebSocket, delay);
+    }
+  };
+  
+  socket.onerror = function(error) {
+    console.error('Errore WebSocket:', error);
+    showMessage('Errore di connessione al server', 'error');
+  };
+  
+  socket.onmessage = function(event) {
+    try {
+      // Supporto sia per JSON che MessagePack
+      let data;
+      try {
+        // Prima tenta di decodificare con MessagePack
+        if (event.data instanceof Blob) {
+          // Converte Blob in ArrayBuffer
+          event.data.arrayBuffer().then(buffer => {
+            const data = msgpack.decode(new Uint8Array(buffer));
+            handleMessage(data);
+          });
+          return;
+        } else if (event.data instanceof ArrayBuffer) {
+          data = msgpack.decode(new Uint8Array(event.data));
+        } else {
+          // Fallback a JSON
+          data = JSON.parse(event.data);
+        }
+      } catch (e) {
+        // Fallback a JSON
+        data = JSON.parse(event.data);
+      }
+      
+      handleMessage(data);
+    } catch (error) {
+      console.error('Errore nella gestione del messaggio:', error);
+    }
+  };
+}
+
+// Separare la gestione dei messaggi per maggiore chiarezza
+function handleMessage(data) {
+  // Aggiorna il timestamp dell'ultimo messaggio ricevuto
+  gameState.lastServerMessage = Date.now();
+  
+  switch (data.type) {
+    case 'welcome':
+      // Messaggio di benvenuto con stato iniziale
+      handleWelcomeMessage(data);
+      break;
+      
+    case 'state':
+      // Aggiornamento completo dello stato
+      handleStateUpdate(data);
+      break;
+      
+    case 'updates':
+      // Aggiornamenti parziali (ottimizzati)
+      handlePlayerUpdates(data);
+      break;
+      
+    case 'join':
+      // Nuovo giocatore
+      handlePlayerJoin(data);
+      break;
+      
+    case 'leave':
+      // Giocatore disconnesso
+      handlePlayerLeave(data);
+      break;
+      
+    case 'playerEaten':
+      // Giocatore mangiato
+      handlePlayerEaten(data);
+      break;
+      
+    case 'error':
+      // Messaggio di errore dal server
+      console.error('Errore dal server:', data.message);
+      showMessage(data.message || 'Errore dal server', 'error');
+      break;
+      
+    default:
+      console.warn('Tipo di messaggio sconosciuto:', data.type);
+  }
+}
+
+// Gestione messaggio di benvenuto
+function handleWelcomeMessage(data) {
+  console.log('Benvenuto, ID:', data.playerId);
+  
+  // Salva l'ID del giocatore
+  gameState.playerId = data.playerId;
+  
+  // Assicurati che il giocatore locale esista
+  if (!gameState.players.has(gameState.playerId)) {
+    const localPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+    if (localPlayer) {
+      const screenWidth = app.renderer.width;
+      const screenHeight = app.renderer.height;
+      
+      localPlayer.x = screenWidth / 2;
+      localPlayer.y = screenHeight / 2;
+      
+      gameState.players.set(gameState.playerId, localPlayer);
+      gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+    }
+  }
+  
+  // Aggiorna tutti i giocatori
+  data.players.forEach(playerData => {
+    if (playerData.id !== gameState.playerId) {
+      updateOrCreatePlayer(playerData);
+    }
+  });
+  
+  // Mostra messaggio di benvenuto
+  showMessage('Connesso al server!', 'success');
+  
+  console.log(`Server sincronizzato, ${data.players.length} giocatori online`);
+}
+
+// Aggiorna o crea un giocatore
+function updateOrCreatePlayer(playerData) {
+  if (!playerData || !playerData.id) return;
+  
+  let player = gameState.players.get(playerData.id);
+  const isLocal = playerData.id === gameState.playerId;
+  
+  if (!player) {
+    // Crea un nuovo sprite per questo giocatore
+    player = createPlayerSprite(playerData.id, isLocal, playerData.size || INITIAL_SIZE);
+    
+    // Aggiungi al gameState
+    gameState.players.set(playerData.id, player);
+  }
+  
+  // Aggiorna le proprietà del giocatore
+  if (player) {
+    if (isLocal) {
+      // Per il giocatore locale usiamo la position corrente
+      // ma aggiungiamo un po' di correzione se il server è troppo divergente
+      const serverX = playerData.x;
+      const serverY = playerData.y;
+      const localX = player.x;
+      const localY = player.y;
+      
+      // Calcola distanza
+      const dx = serverX - localX;
+      const dy = serverY - localY;
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      
+      // Se la divergenza è grande, correggila gradualmente
+      if (distance > 100) {
+        player.x += dx * 0.2;
+        player.y += dy * 0.2;
+        console.log('Correzione posizione con server:', distance.toFixed(2));
+      }
+    } else {
+      // Per gli altri giocatori impostiamo le posizioni target
+      player.targetX = playerData.x;
+      player.targetY = playerData.y;
+    }
+    
+    // Aggiorna dimensione
+    if (playerData.size && player.size !== playerData.size) {
+      updatePlayerSize(player, playerData.size);
+    }
+    
+    // Aggiorna punteggio
+    if (playerData.score !== undefined) {
+      player.score = playerData.score;
+    }
+    
+    // Aggiorna nome
+    if (playerData.name && player.children && player.children[2]) {
+      player.children[2].text = playerData.name;
+    }
+    
+    // Aggiorna colore se fornito
+    if (playerData.color && player.children && player.children[0]) {
+      player.children[0].tint = playerData.color;
+    }
+  }
+}
+
+// Gestione aggiornamento stato completo
+function handleStateUpdate(data) {
+  if (!data.players || !Array.isArray(data.players)) return;
+  
+  // Ottieni i giocatori attuali
+  const currentPlayerIds = new Set(gameState.players.keys());
+  
+  // Traccia i giocatori aggiornati
+  const updatedPlayerIds = new Set();
+  
+  // Aggiorna o crea tutti i giocatori
+  data.players.forEach(playerData => {
+    // Aggiungi uno snapshot per i giocatori remoti al predictor
+    if (playerData.id !== gameState.playerId) {
+      gameState.movementPredictor.addSnapshot(playerData);
+    }
+    
+    // Aggiorna o crea il giocatore
+    updateOrCreatePlayer(playerData);
+    updatedPlayerIds.add(playerData.id);
+  });
+  
+  // Rimuovi giocatori non più presenti (tranne il locale che dovrebbe sempre esserci)
+  currentPlayerIds.forEach(id => {
+    if (!updatedPlayerIds.has(id) && id !== gameState.playerId) {
+      const player = gameState.players.get(id);
+      if (player && player.parent) {
+        player.parent.removeChild(player);
+      }
+      gameState.players.delete(id);
+    }
+  });
+  
+  // Se non c'è il giocatore locale nel set aggiornato, assicurati che ci sia
+  if (!updatedPlayerIds.has(gameState.playerId) && gameState.playerId) {
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (!localPlayer) {
+      // Ricrea il giocatore locale
+      const newLocalPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+      if (newLocalPlayer) {
+        const screenWidth = app.renderer.width;
+        const screenHeight = app.renderer.height;
+        
+        newLocalPlayer.x = screenWidth / 2;
+        newLocalPlayer.y = screenHeight / 2;
+        
+        gameState.players.set(gameState.playerId, newLocalPlayer);
+        gameState.lastPosition = { x: newLocalPlayer.x, y: newLocalPlayer.y };
+      }
+    }
+  }
+  
+  // Aggiorna leaderboard
+  updateLeaderboard();
+}
 
 // Inizializza il gioco quando il DOM è completamente caricato
 document.addEventListener('DOMContentLoaded', () => {
@@ -101,276 +1082,852 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Funzione per inizializzare PixiJS
 function initPixiJS() {
-    // Verifica che PIXI sia disponibile
-    if (typeof PIXI === 'undefined') {
-        console.error("PIXI.js non è stato caricato correttamente");
-        return;
-    }
-    
+    console.log("Inizializzazione PixiJS");
     try {
-        // Inizializza PixiJS con autoDetectRenderer
-        const options = {
-            width: window.innerWidth - 20,
-            height: window.innerHeight - 20,
-            backgroundColor: 0x0a0a0a,
+        // Verifica se PIXI è disponibile
+        if (typeof PIXI === 'undefined') {
+            console.error("PIXI non è definito");
+            showMessage("Impossibile inizializzare il gioco. Ricarica la pagina o prova un browser diverso.", "error");
+            return false;
+        }
+        
+        // Opzioni per l'app PixiJS
+        const appOptions = {
+            backgroundColor: 0x1a1a1a,
             resolution: window.devicePixelRatio || 1,
             antialias: true,
-            // In PixiJS v7+ non è necessario specificare esplicitamente WebGL/Canvas
-            // il renderer verrà automaticamente scelto in base alle capacità del browser
+            autoDensity: true,
+            powerPreference: 'high-performance',
+            // Non specificare il renderer, lasciamo che PixiJS scelga quello migliore
         };
         
-        // Crea l'applicazione
-        app = new PIXI.Application(options);
+        // Crea l'app PixiJS
+        app = new PIXI.Application(appOptions);
         
-        if (!app || !app.renderer) {
-            throw new Error("Impossibile creare l'applicazione PIXI");
+        // Rimuovi qualsiasi canvas precedente
+        const existingCanvas = document.querySelector('#game-container canvas');
+        if (existingCanvas) {
+            existingCanvas.remove();
         }
         
-        // Verifica che il renderer e la view siano stati creati
-        if (!app.renderer || !app.renderer.view) {
-            throw new Error("Il renderer PIXI non è stato inizializzato correttamente");
+        // Aggiungi il nuovo canvas al container
+        const gameContainer = document.getElementById('game-container');
+        gameContainer.appendChild(app.view);
+        
+        // Imposta le dimensioni
+        app.renderer.resize(window.innerWidth, window.innerHeight);
+        
+        // Registra il tipo di renderer utilizzato
+        console.log(`Utilizzando renderer: ${app.renderer.type === PIXI.RENDERER_TYPE.WEBGL ? 'WebGL' : 'Canvas'}`);
+        
+        // Gestione della perdita del contesto WebGL
+        if (app.renderer.type === PIXI.RENDERER_TYPE.WEBGL) {
+            const gl = app.renderer.gl;
+            const canvas = app.view;
+            
+            // Gestione perdita contesto WebGL
+            canvas.addEventListener('webglcontextlost', (event) => {
+                event.preventDefault(); // Necessario per permettere il ripristino
+                console.warn('Contesto WebGL perso, interrompo il rendering');
+                
+                // Ferma il game loop
+                app.ticker.stop();
+                
+                // Mostra un messaggio all'utente
+                showMessage('Perdita contesto grafico. Tentativo di ripristino in corso...', 'warning');
+                
+                // Flag per indicare che il contesto è perso
+                gameState.contextLost = true;
+            }, false);
+            
+            // Gestione ripristino contesto WebGL
+            canvas.addEventListener('webglcontextrestored', () => {
+                console.log('Contesto WebGL ripristinato');
+                
+                // Ricarica le risorse grafiche se necessario
+                refreshGameObjects();
+                
+                // Riavvia il game loop
+                app.ticker.start();
+                
+                // Rimuovi il flag
+                gameState.contextLost = false;
+                
+                // Informa l'utente
+                showMessage('Contesto grafico ripristinato', 'success');
+            }, false);
+            
+            // Funzione di fallback al Canvas renderer se WebGL continua a fallire
+            let webGLFailCount = 0;
+            const maxWebGLFailures = 3;
+            
+            // Aggiungi un listener per gli errori
+            canvas.addEventListener('webglcontextcreationerror', (event) => {
+                console.error('Errore nella creazione del contesto WebGL:', event.statusMessage);
+                webGLFailCount++;
+                
+                if (webGLFailCount >= maxWebGLFailures) {
+                    console.warn('Troppi fallimenti WebGL, passaggio al renderer Canvas');
+                    showMessage('Problemi con il renderer WebGL. Passaggio alla modalità compatibilità.', 'warning');
+                    
+                    // Ricrea l'app con il renderer Canvas
+                    reinitWithCanvasRenderer();
+                }
+            }, false);
         }
         
-        // Aggiungi stile al canvas
-        app.renderer.view.style.display = "block";
-        app.renderer.view.style.margin = "0 auto";
+        // Verifica le dimensioni e orientamento per dispositivi mobili
+        handleDeviceOrientation();
         
-        // Ottieni il container e verifica che esista
-        const container = document.getElementById('game-container');
-        if (!container) {
-            throw new Error("Elemento game-container non trovato");
-        }
+        // Aggiungi evento di ridimensionamento per gestire resizing
+        setupResizeHandler();
         
-        // Aggiungi il canvas al container
-        container.appendChild(app.renderer.view);
-        
-        // Aggiungi resize handler
-        window.addEventListener('resize', () => {
-            if (app && app.renderer) {
-                app.renderer.resize(window.innerWidth - 20, window.innerHeight - 20);
-            }
-        });
-        
-        // Configura il ticker di gioco
-        app.ticker.add((delta) => {
-            if (gameState.players.size > 0) {
-                updateMovement(delta);
-                interpolateOtherPlayers();
-                checkEnergyCollection();
-                checkPlayerCollisions();
-                updateHUD();
-            }
-        });
-        
-        console.log("PixiJS inizializzato con successo, tipo renderer:", app.renderer.type);
         return true;
     } catch (error) {
-        console.error("Errore durante l'inizializzazione di PixiJS:", error);
-        // In caso di errore, mostra un messaggio all'utente
-        showMessage('Errore di inizializzazione grafica', 'warning');
+        console.error("Errore nell'inizializzazione di PixiJS:", error);
+        showMessage("Si è verificato un errore durante l'inizializzazione del gioco", "error");
         return false;
     }
 }
 
-// Funzione di inizializzazione del gioco
-function initGame(username) {
-    // Assicurati che app sia inizializzato
-    if (!app || !app.stage) {
-        console.error("PixiJS non è stato inizializzato correttamente");
-        return;
-    }
-    
+// Fallback a Canvas renderer se WebGL fallisce
+function reinitWithCanvasRenderer() {
     try {
-        // Crea il player locale
-        const player = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
-        if (player) {
-            // Imposta il nome personalizzato
-            player.children[2].text = username;
-            
-            // Aggiungi il player al gameState
-            gameState.players.set(gameState.playerId, player);
-            
-            // Inizia la connessione WebSocket
-            connectWebSocket();
-            
-            // Inizializza i punti energia
-            initEnergyPoints();
-            
-            // Aggiungi il messaggio di istruzioni
-            const startMessage = document.createElement('div');
-            startMessage.id = 'start-message';
-            startMessage.innerHTML = `
-                <h2>Brawl Legends</h2>
-                <p>Raccogli i punti energia gialli per crescere<br>
-                Diventa abbastanza grande per mangiare gli altri giocatori!</p>
-                <div class="start-button">Inizia a Giocare</div>
-            `;
-            document.body.appendChild(startMessage);
-            
-            // Aggiungi evento click al pulsante
-            const startButton = startMessage.querySelector('.start-button');
-            startButton.addEventListener('click', () => {
-                startMessage.style.opacity = '0';
-                setTimeout(() => {
-                    startMessage.remove();
-                }, 500);
+        console.log("Reinizializzazione con Canvas renderer");
+        
+        // Rimuovi l'app e il canvas esistenti
+        if (app) {
+            app.destroy(true, {
+                children: true,
+                texture: true,
+                baseTexture: true
             });
         }
+        
+        // Crea una nuova app con Canvas renderer
+        app = new PIXI.Application({
+            backgroundColor: 0x1a1a1a,
+            resolution: window.devicePixelRatio || 1,
+            antialias: true,
+            forceCanvas: true, // Forza l'uso del renderer Canvas
+        });
+        
+        // Aggiungi il nuovo canvas al container
+        const gameContainer = document.getElementById('game-container');
+        gameContainer.innerHTML = ''; // Rimuovi tutto il contenuto precedente
+        gameContainer.appendChild(app.view);
+        
+        // Reimposta le dimensioni
+        app.renderer.resize(window.innerWidth, window.innerHeight);
+        
+        // Ricrea gli oggetti di gioco
+        refreshGameObjects();
+        
+        console.log("Reinizializzazione completata con renderer Canvas");
+        
+        // Notifica all'utente
+        showMessage("Modalità compatibilità attivata", "info");
+        
+        return true;
     } catch (error) {
-        console.error("Errore durante l'inizializzazione del gioco:", error);
-        showMessage('Errore durante l\'inizializzazione del gioco', 'warning');
+        console.error("Errore nella reinizializzazione con Canvas renderer:", error);
+        showMessage("Impossibile avviare il gioco in modalità compatibilità", "error");
+        return false;
     }
 }
 
-// Funzione per creare uno sprite giocatore
-function createPlayerSprite(playerId, isLocalPlayer = false, size = INITIAL_SIZE) {
-    // Verifica che PIXI sia disponibile e app sia inizializzato
-    if (typeof PIXI === 'undefined' || !app || !app.stage) {
-        console.error("PIXI.js o app non è stato inizializzato correttamente");
+// Ricarica gli oggetti di gioco dopo perdita contesto
+function refreshGameObjects() {
+    // Pulisci lo stage
+    app.stage.removeChildren();
+    
+    // Ricrea lo sfondo
+    createBackground();
+    
+    // Ricrea i punti energia
+    if (gameState.energyPoints) {
+        gameState.energyPoints.forEach(point => {
+            if (point && point.parent) {
+                point.parent.removeChild(point);
+            }
+        });
+    }
+    gameState.energyPoints = [];
+    initEnergyPoints();
+    
+    // Ricrea i giocatori
+    const playerIds = [...gameState.players.keys()];
+    playerIds.forEach(id => {
+        const oldPlayer = gameState.players.get(id);
+        if (oldPlayer) {
+            // Salva le proprietà importanti
+            const props = {
+                x: oldPlayer.x,
+                y: oldPlayer.y,
+                size: oldPlayer.size || INITIAL_SIZE,
+                score: oldPlayer.score || 0,
+                name: oldPlayer.children && oldPlayer.children[2] ? oldPlayer.children[2].text : "",
+                isLocal: id === gameState.playerId
+            };
+            
+            // Rimuovi il vecchio sprite
+            if (oldPlayer.parent) {
+                oldPlayer.parent.removeChild(oldPlayer);
+            }
+            
+            // Crea un nuovo sprite
+            const newPlayer = createPlayerSprite(id, props.isLocal, props.size);
+            if (newPlayer) {
+                newPlayer.x = props.x;
+                newPlayer.y = props.y;
+                newPlayer.targetX = props.x;
+                newPlayer.targetY = props.y;
+                newPlayer.score = props.score;
+                
+                if (props.name) {
+                    newPlayer.children[2].text = props.name;
+                }
+                
+                gameState.players.set(id, newPlayer);
+            }
+        }
+    });
+    
+    // Se siamo il giocatore locale e non esiste, ricrealo
+    if (!gameState.players.has(gameState.playerId)) {
+        const localPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+        if (localPlayer) {
+            const screenWidth = app.renderer.width;
+            const screenHeight = app.renderer.height;
+            
+            localPlayer.x = screenWidth / 2;
+            localPlayer.y = screenHeight / 2;
+            localPlayer.targetX = localPlayer.x;
+            localPlayer.targetY = localPlayer.y;
+            
+            gameState.players.set(gameState.playerId, localPlayer);
+            gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+        }
+    }
+    
+    console.log("Oggetti di gioco ricaricati");
+}
+
+// Aggiorna la funzione di movimento per usare la mappa grande
+function updateMovement(delta) {
+  // Ottieni il giocatore locale
+  const player = gameState.players.get(gameState.playerId);
+  if (!player) return;
+  
+  // Memorizza la posizione precedente per confronto
+  const prevPosition = {
+    x: player.x,
+    y: player.y
+  };
+  
+  // Calcola la velocità in base al delta e alla dimensione
+  // Giocatori più grandi si muovono più lentamente
+  const sizeSpeedFactor = Math.max(0.5, 1 - (player.size / 300));
+  const moveSpeed = PLAYER_SPEED * delta * sizeSpeedFactor;
+  
+  // Variabile per tracciare se il giocatore si è spostato
+  let moved = false;
+  
+  // Aggiorna movimento basato su tasti
+  if (gameState.keys.w) {
+    player.y -= moveSpeed;
+    moved = true;
+  }
+  if (gameState.keys.s) {
+    player.y += moveSpeed;
+    moved = true;
+  }
+  if (gameState.keys.a) {
+    player.x -= moveSpeed;
+    moved = true;
+  }
+  if (gameState.keys.d) {
+    player.x += moveSpeed;
+    moved = true;
+  }
+  
+  // Supporto per joystick mobile se presente
+  if (gameState.joystickData) {
+    if (gameState.joystickData.up) {
+      player.y -= moveSpeed * gameState.joystickData.strength;
+      moved = true;
+    }
+    if (gameState.joystickData.down) {
+      player.y += moveSpeed * gameState.joystickData.strength;
+      moved = true;
+    }
+    if (gameState.joystickData.left) {
+      player.x -= moveSpeed * gameState.joystickData.strength;
+      moved = true;
+    }
+    if (gameState.joystickData.right) {
+      player.x += moveSpeed * gameState.joystickData.strength;
+      moved = true;
+    }
+  }
+  
+  // Limita il movimento ai bordi del mondo
+  const effectiveRadius = player.size / 2;
+  const padding = WORLD_CONFIG.padding;
+  
+  player.x = Math.max(effectiveRadius + padding, 
+               Math.min(player.x, WORLD_CONFIG.width - effectiveRadius - padding));
+  player.y = Math.max(effectiveRadius + padding, 
+               Math.min(player.y, WORLD_CONFIG.height - effectiveRadius - padding));
+  
+  // Aggiorna le posizioni target per interpolazione fluida
+  player.targetX = player.x;
+  player.targetY = player.y;
+  
+  // Calcola la distanza percorsa
+  const dx = player.x - prevPosition.x;
+  const dy = player.y - prevPosition.y;
+  const distance = Math.sqrt(dx*dx + dy*dy);
+  
+  // Invia aggiornamenti al server solo se necessario
+  const currentTime = Date.now();
+  const timeSinceLastUpdate = currentTime - (gameState.lastUpdate || 0);
+  
+  if ((moved && distance > 1) || timeSinceLastUpdate > 100) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      // Determina se mandare coordinata assoluta o relativa
+      const useAbsolutePosition = timeSinceLastUpdate > 1000;
+      
+      if (useAbsolutePosition) {
+        // Posizione assoluta periodica per risync
+        socket.send(msgpack.encode({
+          type: 'move',
+          id: gameState.playerId,
+          x: Math.round(player.x),
+          y: Math.round(player.y)
+        }));
+      } else {
+        // Delta di movimento per ottimizzare
+        socket.send(msgpack.encode({
+          type: 'move',
+          id: gameState.playerId,
+          dx: Math.round(dx),
+          dy: Math.round(dy)
+        }));
+      }
+      
+      // Aggiorna ultimo timestamp e posizione
+      gameState.lastPosition = { x: player.x, y: player.y };
+      gameState.lastUpdate = currentTime;
+    }
+  }
+  
+  // Controlla collisioni
+  checkEnergyCollisions();
+  checkPlayerCollisions();
+}
+
+// Funzione per verificare le collisioni con i punti energia
+function checkEnergyCollisions() {
+  // Ottieni il giocatore locale
+  const player = gameState.players.get(gameState.playerId);
+  if (!player || !gameState.energyPoints || !gameState.energyPoints.length) return;
+  
+  // Raggio effettivo per collisione
+  const playerRadius = player.size / 2;
+  
+  // Per ogni punto energia, verifica la collisione
+  for (let i = gameState.energyPoints.length - 1; i >= 0; i--) {
+    const point = gameState.energyPoints[i];
+    
+    // Calcola distanza
+    const dx = player.x - point.x;
+    const dy = player.y - point.y;
+    const distance = Math.sqrt(dx*dx + dy*dy);
+    
+    // Se il giocatore tocca il punto energia
+    if (distance < playerRadius + 10) { // 10 = raggio del punto energia
+      // Rimuovi punto energia visivamente
+      if (point.parent) {
+        point.parent.removeChild(point);
+      }
+      
+      // Rimuovi dall'array
+      gameState.energyPoints.splice(i, 1);
+      
+      // Incrementa punteggio e dimensione
+      player.score += 10;
+      const newSize = Math.min(player.size + 2, 200); // Limita dimensione massima
+      
+      // Aggiorna dimensione del player
+      updatePlayerSize(player, newSize);
+      
+      // Effetto particellare
+      createCollectEffect(point.x, point.y);
+      
+      // Invia al server
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(msgpack.encode({
+          type: 'collectEnergy',
+          id: gameState.playerId,
+          score: player.score,
+          size: player.size
+        }));
+      }
+      
+      // Crea nuovo punto energia in una posizione casuale
+      const padding = WORLD_CONFIG.padding + 50;
+      const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+      const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+      
+      const newPoint = createEnergyPoint(x, y);
+      gameState.energyPoints.push(newPoint);
+    }
+  }
+}
+
+// Funzione per aggiornare la dimensione del giocatore
+function updatePlayerSize(player, newSize) {
+  if (!player) return;
+  
+  // Memorizza la vecchia dimensione
+  const oldSize = player.size;
+  
+  // Aggiorna la proprietà size
+  player.size = newSize;
+  
+  // Aggiorna il corpo del giocatore
+  if (player.children && player.children[0]) {
+    // Corpo principale
+    const mainCircle = player.children[0];
+    mainCircle.clear();
+    mainCircle.beginFill(player.isLocal ? 0x00ff88 : 0xff3333, 0.8);
+    mainCircle.drawCircle(0, 0, newSize / 2);
+    mainCircle.endFill();
+  }
+  
+  // Aggiorna il bordo
+  if (player.children && player.children[1]) {
+    const border = player.children[1];
+    border.clear();
+    border.lineStyle(2, 0xffffff, 0.5);
+    border.drawCircle(0, 0, newSize / 2 + 1);
+  }
+  
+  // Aggiorna la posizione del nome
+  if (player.children && player.children[2]) {
+    player.children[2].y = -newSize / 2 - 15;
+  }
+  
+  // Crea effetto level up se è il giocatore locale e la dimensione è aumentata
+  if (player.isLocal && newSize > oldSize) {
+    createLevelUpEffect(player);
+    checkLevelUp(player);
+  }
+  
+  return newSize;
+}
+
+// Controlla se il giocatore ha raggiunto un nuovo livello
+function checkLevelUp(player) {
+  if (!player) return;
+  
+  // Trova il livello corrispondente alla dimensione attuale
+  let newLevel = 1;
+  
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (player.size >= LEVEL_THRESHOLDS[i].size) {
+      newLevel = LEVEL_THRESHOLDS[i].level;
+      break;
+    }
+  }
+  
+  // Se il livello è cambiato
+  if (newLevel > player.level) {
+    player.level = newLevel;
+    
+    // Trova l'abilità sbloccata a questo livello
+    const levelData = LEVEL_THRESHOLDS.find(l => l.level === newLevel);
+    
+    if (levelData) {
+      // Mostra messaggio di level up
+      showMessage(`Livello ${newLevel}: ${levelData.name}!`, 'success');
+      
+      // Se c'è un'abilità, mostra info
+      if (levelData.ability) {
+        showMessage(`Hai sbloccato l'abilità: ${levelData.ability.toUpperCase()}`, 'info', 3000);
+      }
+    }
+  }
+}
+
+// Funzione per creare punti energia in posizioni specifiche
+function spawnEnergyPointAt(x, y) {
+    // Verifica che l'app e lo stage siano inizializzati
+    if (!app || !app.stage) {
+        console.warn("Impossibile creare punto energia: app o stage non disponibile");
         return null;
     }
     
-    try {
-        const container = new PIXI.Container();
-        
-        // Corpo principale
-        const bodyColor = isLocalPlayer ? 0x00ff88 : 0xff4500;
-        const body = new PIXI.Graphics();
-        body.beginFill(bodyColor);
-        body.drawCircle(0, 0, size);
-        body.endFill();
-        
-        // Effetto glow
-        const glow = new PIXI.Graphics();
-        glow.beginFill(bodyColor, 0.3);
-        glow.drawCircle(0, 0, size + 10);
-        glow.endFill();
-        
-        // Nome giocatore (usa le prime 4 cifre dell'ID)
-        const playerName = new PIXI.Text(playerId.substring(0, 4), {
-            fontFamily: 'Arial',
-            fontSize: 12,
-            fill: 0xffffff,
-            align: 'center'
-        });
-        playerName.anchor.set(0.5);
-        playerName.y = -size - 15;
-        
-        // Aggiungi tutto al container
-        container.addChild(glow);
-        container.addChild(body);
-        container.addChild(playerName);
-        
-        // Posizione iniziale casuale (usa valori predefiniti se app.screen non è disponibile)
-        const screenWidth = (app && app.renderer && app.renderer.width) ? app.renderer.width : 1280;
-        const screenHeight = (app && app.renderer && app.renderer.height) ? app.renderer.height : 720;
-        
-        container.x = Math.random() * (screenWidth - 100) + 50;
-        container.y = Math.random() * (screenHeight - 100) + 50;
-        container.targetX = container.x;
-        container.targetY = container.y;
-        container.size = size; // Memorizziamo la dimensione corrente
-        container.score = 0;   // Punteggio iniziale
-        
-        // Aggiungi al display solo se app è inizializzato
-        if (app && app.stage) {
-            app.stage.addChild(container);
+    // Crea un nuovo punto energia
+    const energyPoint = new PIXI.Graphics();
+    energyPoint.beginFill(0x00ff00, 0.7);
+    energyPoint.drawCircle(0, 0, 10);
+    energyPoint.endFill();
+    
+    // Aggiungi effetto di brillantezza
+    energyPoint.filters = [new PIXI.filters.GlowFilter(15, 2, 1, 0x00ff00, 0.5)];
+    
+    // Imposta la posizione
+    energyPoint.x = x;
+    energyPoint.y = y;
+    
+    // Aggiungi all'app
+    app.stage.addChild(energyPoint);
+    
+    // Aggiungi alla lista di punti energia
+    if (!gameState.energyPoints) {
+        gameState.energyPoints = [];
+    }
+    gameState.energyPoints.push(energyPoint);
+    
+    // Animazione pulsante
+    gsap.to(energyPoint.scale, {
+        x: 1.2,
+        y: 1.2,
+        duration: 0.8,
+        repeat: -1,
+        yoyo: true,
+        ease: "sine.inOut"
+    });
+    
+    return energyPoint;
+}
+
+// Rileva e correggi automaticamente i problemi di rendering
+function setupAutomaticRecovery() {
+    // Controllo periodico dello stato del rendering
+    const recoveryInterval = setInterval(() => {
+        // Se il contesto è perso da troppo tempo, tenta il ripristino forzato
+        if (gameState.contextLost) {
+            const timeSinceLost = Date.now() - gameState.contextLostTime;
             
-            // Aggiungi effetto "pulse" per il giocatore locale
-            if (isLocalPlayer) {
-                app.ticker.add(() => {
-                    const time = performance.now() / 1000;
-                    glow.scale.set(1 + Math.sin(time * 2) * 0.1);
-                });
+            if (timeSinceLost > 5000) { // 5 secondi
+                console.warn("Tentativo di recupero forzato del contesto...");
+                
+                // Tenta di passare al renderer Canvas se non ci siamo già
+                if (app && app.renderer.type === PIXI.RENDERER_TYPE.WEBGL) {
+                    reinitWithCanvasRenderer();
+                } else {
+                    // Se siamo già in Canvas o altro, ricrea tutto
+                    initGame();
+                }
             }
         }
         
-        return container;
-    } catch (error) {
-        console.error("Errore durante la creazione dello sprite:", error);
-        return null;
-    }
+        // Verifica anche se l'app è in esecuzione ma ci sono problemi di rendering
+        if (app && app.ticker.started) {
+            // Se il giocatore locale non è visibile ma dovrebbe esserlo
+            const localPlayer = gameState.players.get(gameState.playerId);
+            if (localPlayer && !localPlayer.visible && !gameState.contextLost) {
+                console.warn("Rilevato problema di visibilità, tentativo di recupero...");
+                refreshGameObjects();
+            }
+        }
+    }, 10000); // Controlla ogni 10 secondi
+    
+    // Memorizza il riferimento per fermare il controllo se necessario
+    gameState.recoveryInterval = recoveryInterval;
 }
 
-// Imposta input da tastiera
-window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() in gameState.keys) {
-        gameState.keys[e.key.toLowerCase()] = true;
-    }
-});
-
-window.addEventListener('keyup', (e) => {
-    if (e.key.toLowerCase() in gameState.keys) {
-        gameState.keys[e.key.toLowerCase()] = false;
-    }
-});
-
-// Movimento WASD con predizione lato client
-function updateMovement(delta) {
-    // Verifica che app sia inizializzato
-    if (!app || !app.renderer) return;
+// Modifica la funzione initGame per usare il nuovo sistema di recupero
+function initGame(username) {
+    console.log("Inizializzazione del gioco");
     
-    const player = gameState.players.get(gameState.playerId);
-    
-    // Verifica che il player esista prima di accedere alle sue proprietà
-    if (!player) return;
-    
-    const prevX = player.x;
-    const prevY = player.y;
-    
-    // Calcola la velocità base (modificata se speed boost è attivo)
-    let speed = PLAYER_SPEED;
-    if (gameState.abilities.active.speed) {
-        speed = PLAYER_SPEED * 2; // Raddoppia la velocità con lo speed boost
+    const success = initPixiJS();
+    if (!success) {
+        console.error("Fallimento nell'inizializzazione di PixiJS");
+        showMessage("Impossibile inizializzare il gioco. Prova un browser diverso o controlla la console per dettagli.", "error");
+        
+        // Torna alla schermata di login dopo un errore
+        setTimeout(() => {
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('game-container').style.display = 'none';
+        }, 3000);
+        
+        return;
     }
     
-    // Applica movimento in base ai tasti premuti
-    if (gameState.keys.w) player.y -= speed * delta;
-    if (gameState.keys.a) player.x -= speed * delta;
-    if (gameState.keys.s) player.y += speed * delta;
-    if (gameState.keys.d) player.x += speed * delta;
+    // Inizializza il contatore FPS
+    initFpsCounter();
     
-    // Limita movimento all'interno dello schermo usando valori predefiniti se app.screen non è disponibile
-    const screenWidth = app.renderer.width || 1280;
-    const screenHeight = app.renderer.height || 720;
+    // Inizializza sfondo
+    createBackground();
     
-    player.x = Math.max(20, Math.min(screenWidth - 20, player.x));
-    player.y = Math.max(20, Math.min(screenHeight - 20, player.y));
+    // Inizializza punti energia
+    initEnergyPoints();
     
-    // Invia aggiornamenti solo se la posizione è cambiata
-    const now = Date.now();
-    if (now - gameState.lastUpdate > 50 && (prevX !== player.x || prevY !== player.y)) {
-        gameState.lastUpdate = now;
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            // Calcola delta rispetto all'ultima posizione
-            const deltaX = Math.round(player.x - gameState.lastPosition.x);
-            const deltaY = Math.round(player.y - gameState.lastPosition.y);
-            
-            // Aggiorna l'ultima posizione inviata
-            gameState.lastPosition.x = player.x;
-            gameState.lastPosition.y = player.y;
-            
-            // Invia solo i delta per ottimizzare
-            socket.send(msgpack.encode({
-                type: 'move',
-                id: gameState.playerId,
-                dx: deltaX,
-                dy: deltaY,
-                x: Math.round(player.x),  // Invia anche la posizione assoluta per sicurezza
-                y: Math.round(player.y)
-            }));
-        }
-    }
-}
-
-// Funzione per interpolare il movimento di altri giocatori
-function interpolateOtherPlayers() {
-    gameState.players.forEach((sprite, id) => {
-        if (id !== gameState.playerId && sprite && sprite.targetX !== undefined) {
-            sprite.x += (sprite.targetX - sprite.x) * INTERPOLATION_FACTOR;
-            sprite.y += (sprite.targetY - sprite.y) * INTERPOLATION_FACTOR;
-        }
+    // Nasconde la schermata di login
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    
+    // Inizializza controlli
+    setupControls();
+    
+    // Connetti al server
+    connectWebSocket();
+    
+    // Attiva il sistema di recupero automatico
+    setupAutomaticRecovery();
+    
+    // Imposta il loop di gioco principale
+    app.ticker.add(delta => {
+        if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+        
+        updateMovement(delta);
+        interpolatePlayers(delta);
+        updateEnergyPoints(delta);
+        
+        // Aggiorna contatore FPS
+        updateFpsCounter(app.ticker.FPS);
     });
+    
+    console.log("Gioco inizializzato con successo");
+}
+
+// Aggiorna il gameState per tracciare lo stato del contesto WebGL
+gameState.contextLost = false;
+gameState.contextLostTime = 0;
+gameState.recoveryInterval = null;
+
+// Aggiungi il predictor al gameState
+gameState.movementPredictor = new MovementPredictor();
+
+// Modifica la funzione di gestione del messaggio di stato
+function handleStateUpdate(data) {
+  if (!data.players || !Array.isArray(data.players)) return;
+  
+  // Ottieni i giocatori attuali
+  const currentPlayerIds = new Set(gameState.players.keys());
+  
+  // Traccia i giocatori aggiornati
+  const updatedPlayerIds = new Set();
+  
+  // Aggiorna o crea tutti i giocatori
+  data.players.forEach(playerData => {
+    // Aggiungi uno snapshot per i giocatori remoti al predictor
+    if (playerData.id !== gameState.playerId) {
+      gameState.movementPredictor.addSnapshot(playerData);
+    }
+    
+    // Aggiorna o crea il giocatore
+    updateOrCreatePlayer(playerData);
+    updatedPlayerIds.add(playerData.id);
+  });
+  
+  // Rimuovi giocatori non più presenti (tranne il locale che dovrebbe sempre esserci)
+  currentPlayerIds.forEach(id => {
+    if (!updatedPlayerIds.has(id) && id !== gameState.playerId) {
+      const player = gameState.players.get(id);
+      if (player && player.parent) {
+        player.parent.removeChild(player);
+      }
+      gameState.players.delete(id);
+    }
+  });
+  
+  // Se non c'è il giocatore locale nel set aggiornato, assicurati che ci sia
+  if (!updatedPlayerIds.has(gameState.playerId) && gameState.playerId) {
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (!localPlayer) {
+      // Ricrea il giocatore locale
+      const newLocalPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+      if (newLocalPlayer) {
+        const screenWidth = app.renderer.width;
+        const screenHeight = app.renderer.height;
+        
+        newLocalPlayer.x = screenWidth / 2;
+        newLocalPlayer.y = screenHeight / 2;
+        
+        gameState.players.set(gameState.playerId, newLocalPlayer);
+        gameState.lastPosition = { x: newLocalPlayer.x, y: newLocalPlayer.y };
+      }
+    }
+  }
+  
+  // Aggiorna leaderboard
+  updateLeaderboard();
+}
+
+// Modifica updateOrCreatePlayer per usare il predictor
+function updateOrCreatePlayer(playerData) {
+  if (!playerData || !playerData.id) return;
+  
+  let player = gameState.players.get(playerData.id);
+  const isLocal = playerData.id === gameState.playerId;
+  
+  if (!player) {
+    // Crea un nuovo sprite per questo giocatore
+    player = createPlayerSprite(playerData.id, isLocal, playerData.size || INITIAL_SIZE);
+    
+    // Aggiungi al gameState
+    gameState.players.set(playerData.id, player);
+  }
+  
+  // Aggiorna le proprietà del giocatore
+  if (player) {
+    if (isLocal) {
+      // Per il giocatore locale usiamo la position corrente
+      // ma aggiungiamo un po' di correzione se il server è troppo divergente
+      const serverX = playerData.x;
+      const serverY = playerData.y;
+      const localX = player.x;
+      const localY = player.y;
+      
+      // Calcola distanza
+      const dx = serverX - localX;
+      const dy = serverY - localY;
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      
+      // Se la divergenza è grande, correggila gradualmente
+      if (distance > 100) {
+        player.x += dx * 0.2;
+        player.y += dy * 0.2;
+        console.log('Correzione posizione con server:', distance.toFixed(2));
+      }
+    } else {
+      // Per gli altri giocatori, usa il predictor
+      if (gameState.movementPredictor) {
+        // Riconcilia lo stato solo se playerData contiene posizione
+        if (typeof playerData.x === 'number' && typeof playerData.y === 'number') {
+          // Predici la posizione
+          const predicted = gameState.movementPredictor.predict(playerData);
+          
+          // Riconcilia con lo stato del server
+          const reconciled = gameState.movementPredictor.reconcile(playerData);
+          
+          // Aggiorna le coordinate target
+          player.targetX = reconciled.x;
+          player.targetY = reconciled.y;
+        }
+      } else {
+        // Fallback al vecchio metodo
+        player.targetX = playerData.x;
+        player.targetY = playerData.y;
+      }
+    }
+    
+    // Aggiorna dimensione
+    if (playerData.size && player.size !== playerData.size) {
+      updatePlayerSize(player, playerData.size);
+    }
+    
+    // Aggiorna punteggio
+    if (playerData.score !== undefined) {
+      player.score = playerData.score;
+    }
+    
+    // Aggiorna nome
+    if (playerData.name && player.children && player.children[2]) {
+      player.children[2].text = playerData.name;
+    }
+    
+    // Aggiorna colore se fornito
+    if (playerData.color && player.children && player.children[0]) {
+      player.children[0].tint = playerData.color;
+    }
+  }
+}
+
+// Migliora la funzione di interpolazione per usare il predictor
+function interpolateOtherPlayers(delta) {
+  gameState.players.forEach((player, id) => {
+    // Salta il giocatore locale
+    if (id === gameState.playerId) return;
+    
+    // Se ha coordinate target, interpolale
+    if (typeof player.targetX === 'number' && typeof player.targetY === 'number') {
+      // Quanto velocemente si muove il giocatore verso il target
+      // Giocatori più grandi si muovono più lentamente
+      const sizeFactor = Math.max(0.5, 1 - (player.size / 500)); 
+      const lerpFactor = 0.1 * sizeFactor * delta;
+      
+      // Interpolazione lineare
+      player.x += (player.targetX - player.x) * lerpFactor;
+      player.y += (player.targetY - player.y) * lerpFactor;
+      
+      // Aggiungi effetto di movimento (scia, ecc) se disponibile
+      if (gameState.useAdvancedEffects && player.size > 30) {
+        createMovementTrail(player, delta);
+      }
+    }
+  });
+}
+
+// Crea un effetto scia per il movimento
+function createMovementTrail(player, delta) {
+  // Salta se il giocatore non si muove abbastanza
+  const dx = player.x - (player.lastX || player.x);
+  const dy = player.y - (player.lastY || player.y);
+  const distance = Math.sqrt(dx*dx + dy*dy);
+  
+  // Memorizza l'ultima posizione
+  player.lastX = player.x;
+  player.lastY = player.y;
+  
+  // Se il movimento è minimo o non abbiamo particelle, salta
+  if (distance < 3 || !gameState.particleDensity) return;
+  
+  // Crea particelle in base alla dimensione del giocatore e alle performance
+  const particleCount = Math.floor(player.size / 20 * gameState.particleDensity);
+  
+  // Per ogni particella
+  for (let i = 0; i < particleCount; i++) {
+    // Crea una particella se non sono troppe
+    if (app.stage.children.length < gameState.maxParticles) {
+      const trail = new PIXI.Graphics();
+      
+      // Dimensione casuale
+      const size = Math.random() * player.size / 8 + 1;
+      
+      // Colore basato sul giocatore
+      const color = player.children[0].tint || 0xffffff;
+      
+      // Disegna il cerchio
+      trail.beginFill(color, 0.3);
+      trail.drawCircle(0, 0, size);
+      trail.endFill();
+      
+      // Posizione casuale all'interno del giocatore
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * player.size / 2 * 0.8;
+      trail.x = player.x - Math.cos(angle) * radius;
+      trail.y = player.y - Math.sin(angle) * radius;
+      
+      // Aggiungi alle possibili proprietà per l'animazione
+      trail.alpha = 0.7;
+      
+      // Aggiungi alla scena
+      if (gameState.camera) {
+        gameState.camera.addToWorld(trail);
+      } else {
+        app.stage.addChild(trail);
+      }
+      
+      // Animazione di dissolvenza
+      gsap.to(trail, {
+        alpha: 0,
+        x: trail.x - dx * Math.random(),
+        y: trail.y - dy * Math.random(),
+        duration: 0.5 + Math.random() * 0.5,
+        onComplete: () => {
+          if (trail.parent) {
+            trail.parent.removeChild(trail);
+          }
+        }
+      });
+    }
+  }
 }
 
 // Funzione per aggiornare l'HUD
@@ -459,24 +2016,60 @@ function connectWebSocket() {
     
     socket.binaryType = 'arraybuffer';
     
+    // Imposta un timeout per la connessione
+    const connectionTimeout = setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN) {
+            console.error("Timeout nella connessione WebSocket");
+            socket.close();
+            
+            // Mostra un messaggio all'utente
+            showMessage('Impossibile connettersi al server. Riprova più tardi.', 'warning');
+            
+            // In modalità di sviluppo, offri di continuare in modalità offline
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                if (confirm('Vuoi continuare in modalità offline (solo sviluppo)?')) {
+                    enableOfflineMode();
+                }
+            }
+        }
+    }, 5000);
+    
     socket.onopen = () => {
         console.log('Connessione WebSocket stabilita');
+        clearTimeout(connectionTimeout);
         
         // Assicurati che il giocatore locale sia inizializzato
         if (!gameState.players.has(gameState.playerId)) {
             const localPlayer = createPlayerSprite(gameState.playerId, true);
-            gameState.players.set(gameState.playerId, localPlayer);
-            gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+            if (localPlayer) {
+                gameState.players.set(gameState.playerId, localPlayer);
+                gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+            } else {
+                console.error("Impossibile creare il giocatore locale");
+                return;
+            }
         }
         
         // Invia il primo messaggio di join con posizione iniziale
         const localPlayer = gameState.players.get(gameState.playerId);
-        socket.send(msgpack.encode({
+        sendToServer({
             type: 'join',
             id: gameState.playerId,
             x: Math.round(localPlayer.x),
-            y: Math.round(localPlayer.y)
-        }));
+            y: Math.round(localPlayer.y),
+            name: localPlayer.children[2].text || "Player"
+        });
+        
+        // Invia regolarmente un ping per mantenere attiva la connessione
+        gameState.pingInterval = setInterval(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                sendToServer({
+                    type: 'ping',
+                    id: gameState.playerId,
+                    timestamp: Date.now()
+                });
+            }
+        }, 30000); // Ogni 30 secondi
         
         // Resetta i tentativi di riconnessione
         reconnectAttempts = 0;
@@ -486,70 +2079,38 @@ function connectWebSocket() {
         try {
             const data = msgpack.decode(new Uint8Array(event.data));
             
+            // Aggiorna il timestamp dell'ultimo messaggio ricevuto
+            gameState.lastServerMessage = Date.now();
+            
             switch(data.type) {
                 case 'state':
-                    // Aggiorna le posizioni di tutti i giocatori
-                    data.players.forEach(player => {
-                        if (player.id !== gameState.playerId) {
-                            if (!gameState.players.has(player.id)) {
-                                // Crea nuovo sprite per giocatori che non esistono ancora
-                                gameState.players.set(player.id, createPlayerSprite(player.id));
-                            }
-                            
-                            // Aggiorna la posizione target per l'interpolazione
-                            const sprite = gameState.players.get(player.id);
-                            sprite.targetX = player.x;
-                            sprite.targetY = player.y;
-                        }
-                    });
-                    
-                    // Rimuovi giocatori che non sono più presenti
-                    const activePlayers = new Set(data.players.map(p => p.id));
-                    [...gameState.players.keys()].forEach(id => {
-                        if (!activePlayers.has(id) && id !== gameState.playerId) {
-                            const sprite = gameState.players.get(id);
-                            // Verifica che app.stage sia disponibile prima di rimuovere
-                            if (app && app.stage && sprite && sprite.parent) {
-                                app.stage.removeChild(sprite);
-                            }
-                            gameState.players.delete(id);
-                        }
-                    });
+                    handleStateUpdate(data);
                     break;
                     
                 case 'join':
-                    if (data.id !== gameState.playerId && !gameState.players.has(data.id)) {
-                        const newPlayer = createPlayerSprite(data.id);
-                        newPlayer.x = data.x;
-                        newPlayer.y = data.y;
-                        newPlayer.targetX = data.x;
-                        newPlayer.targetY = data.y;
-                        gameState.players.set(data.id, newPlayer);
-                    }
+                    handlePlayerJoin(data);
                     break;
                     
                 case 'move':
-                    if (data.id !== gameState.playerId && gameState.players.has(data.id)) {
-                        const sprite = gameState.players.get(data.id);
-                        // Usa x,y assoluti se disponibili, altrimenti calcola dai delta
-                        if (data.x !== undefined) {
-                            sprite.targetX = data.x;
-                            sprite.targetY = data.y;
-                        } else {
-                            sprite.targetX = sprite.targetX + data.dx;
-                            sprite.targetY = sprite.targetY + data.dy;
-                        }
-                    }
+                    handlePlayerMove(data);
                     break;
                     
                 case 'leave':
-                    if (gameState.players.has(data.id)) {
-                        const sprite = gameState.players.get(data.id);
-                        // Verifica che app.stage sia disponibile prima di rimuovere
-                        if (app && app.stage && sprite && sprite.parent) {
-                            app.stage.removeChild(sprite);
-                        }
-                        gameState.players.delete(data.id);
+                    handlePlayerLeave(data);
+                    break;
+                    
+                case 'error':
+                    console.error('Errore dal server:', data.message);
+                    showMessage('Errore: ' + data.message, 'warning');
+                    break;
+                    
+                case 'pong':
+                    // Calcola la latenza
+                    if (data.timestamp) {
+                        const latency = Date.now() - data.timestamp;
+                        gameState.latency = latency;
+                        // Solo per debug
+                        // console.log(`Latenza: ${latency}ms`);
                     }
                     break;
             }
@@ -558,33 +2119,248 @@ function connectWebSocket() {
         }
     };
     
-    socket.onclose = () => {
-        console.log('Connessione WebSocket chiusa');
-        // Tenta la riconnessione con backoff esponenziale
-        const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000);
-        reconnectAttempts++;
+    socket.onclose = (event) => {
+        console.log('Connessione WebSocket chiusa', event.code, event.reason);
+        clearInterval(gameState.pingInterval);
         
-        setTimeout(() => {
-            connectWebSocket();
-        }, delay);
+        // Se è stata chiusa in modo pulito, non riconnettere
+        if (event.wasClean) {
+            showMessage('Disconnesso dal server', 'info');
+        } else {
+            // Tenta la riconnessione con backoff esponenziale
+            const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000);
+            reconnectAttempts++;
+            
+            showMessage(`Connessione persa. Riconnessione tra ${Math.round(delay/1000)}s...`, 'warning');
+            
+            setTimeout(() => {
+                if (document.visibilityState !== 'hidden') {
+                    connectWebSocket();
+                } else {
+                    // Se la pagina è in background, rimandiamo la riconnessione
+                    document.addEventListener('visibilitychange', function reconnectOnVisible() {
+                        if (document.visibilityState === 'visible') {
+                            document.removeEventListener('visibilitychange', reconnectOnVisible);
+                            connectWebSocket();
+                        }
+                    });
+                }
+            }, delay);
+        }
     };
     
     socket.onerror = (error) => {
         console.error('Errore WebSocket:', error);
         // Mostra un messaggio più descrittivo
-        const errorBox = document.createElement('div');
-        errorBox.style.position = 'fixed';
-        errorBox.style.top = '10px';
-        errorBox.style.left = '50%';
-        errorBox.style.transform = 'translateX(-50%)';
-        errorBox.style.padding = '10px 20px';
-        errorBox.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
-        errorBox.style.color = 'white';
-        errorBox.style.borderRadius = '5px';
-        errorBox.style.zIndex = '1000';
-        errorBox.textContent = `Errore di connessione al server: ${WS_URL}. Verifica la console per dettagli.`;
-        document.body.appendChild(errorBox);
+        showMessage(`Errore di connessione al server. Verifica la tua connessione.`, 'warning');
     };
+}
+
+// Funzione per inviare dati al server in modo sicuro
+function sendToServer(data) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.warn('Tentativo di invio dati con socket non aperto');
+        return false;
+    }
+    
+    try {
+        socket.send(msgpack.encode(data));
+        return true;
+    } catch (error) {
+        console.error('Errore nell\'invio dei dati al server:', error);
+        return false;
+    }
+}
+
+// Gestisce l'aggiornamento dello stato dal server
+function handleStateUpdate(data) {
+    // Assicurati che il giocatore locale sia sempre presente
+    const localPlayerExists = gameState.players.has(gameState.playerId);
+    
+    // Aggiorna le posizioni di tutti i giocatori
+    data.players.forEach(player => {
+        if (player.id !== gameState.playerId) {
+            if (!gameState.players.has(player.id)) {
+                // Crea nuovo sprite per giocatori che non esistono ancora
+                const newPlayer = createPlayerSprite(player.id);
+                if (newPlayer) {
+                    // Aggiorna il nome se disponibile
+                    if (player.name) {
+                        newPlayer.children[2].text = player.name;
+                    }
+                    
+                    gameState.players.set(player.id, newPlayer);
+                }
+            }
+            
+            // Aggiorna la posizione target per l'interpolazione
+            const sprite = gameState.players.get(player.id);
+            if (sprite) {
+                sprite.targetX = player.x;
+                sprite.targetY = player.y;
+                
+                // Aggiorna dimensione e punteggio se disponibili
+                if (player.size) {
+                    updatePlayerSize(sprite, player.size);
+                }
+                
+                if (player.score !== undefined) {
+                    sprite.score = player.score;
+                }
+            }
+        }
+    });
+    
+    // Rimuovi giocatori che non sono più presenti
+    const activePlayers = new Set(data.players.map(p => p.id));
+    [...gameState.players.keys()].forEach(id => {
+        if (!activePlayers.has(id) && id !== gameState.playerId) {
+            const sprite = gameState.players.get(id);
+            // Verifica che app.stage sia disponibile prima di rimuovere
+            if (app && app.stage && sprite && sprite.parent) {
+                app.stage.removeChild(sprite);
+            }
+            gameState.players.delete(id);
+        }
+    });
+    
+    // Se il giocatore locale è stato rimosso, ricrealo
+    if (!localPlayerExists && !activePlayers.has(gameState.playerId)) {
+        console.warn('Giocatore locale non trovato, ricreazione...');
+        const localPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+        if (localPlayer) {
+            gameState.players.set(gameState.playerId, localPlayer);
+            gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+            
+            // Notifica al server la nostra presenza
+            sendToServer({
+                type: 'join',
+                id: gameState.playerId,
+                x: Math.round(localPlayer.x),
+                y: Math.round(localPlayer.y)
+            });
+        }
+    }
+}
+
+// Gestisce l'ingresso di un nuovo giocatore
+function handlePlayerJoin(data) {
+    // Ignora se siamo noi stessi
+    if (data.id === gameState.playerId) return;
+    
+    // Verifica se il giocatore esiste già
+    if (!gameState.players.has(data.id)) {
+        const newPlayer = createPlayerSprite(data.id);
+        if (newPlayer) {
+            newPlayer.x = data.x;
+            newPlayer.y = data.y;
+            newPlayer.targetX = data.x;
+            newPlayer.targetY = data.y;
+            
+            // Aggiungi nome se presente
+            if (data.name) {
+                newPlayer.children[2].text = data.name;
+            }
+            
+            gameState.players.set(data.id, newPlayer);
+            
+            // Mostra un messaggio di benvenuto
+            showMessage(`${data.name || 'Nuovo giocatore'} è entrato!`, 'info');
+        }
+    }
+}
+
+// Gestisce il movimento di un giocatore
+function handlePlayerMove(data) {
+    // Ignora se siamo noi stessi (abbiamo già aggiornato localmente)
+    if (data.id === gameState.playerId) return;
+    
+    if (gameState.players.has(data.id)) {
+        const sprite = gameState.players.get(data.id);
+        // Usa x,y assoluti se disponibili, altrimenti calcola dai delta
+        if (data.x !== undefined) {
+            sprite.targetX = data.x;
+            sprite.targetY = data.y;
+        } else if (data.dx !== undefined && data.dy !== undefined) {
+            sprite.targetX = sprite.targetX + data.dx;
+            sprite.targetY = sprite.targetY + data.dy;
+        }
+    }
+}
+
+// Gestisce l'uscita di un giocatore
+function handlePlayerLeave(data) {
+    if (gameState.players.has(data.id)) {
+        const sprite = gameState.players.get(data.id);
+        // Crea un effetto di scomparsa
+        if (app && app.stage && sprite && sprite.parent) {
+            gsap.to(sprite, {
+                alpha: 0,
+                pixi: { scale: 0.5 },
+                duration: 0.5,
+                onComplete: () => {
+                    if (app && app.stage && sprite && sprite.parent) {
+                        app.stage.removeChild(sprite);
+                    }
+                    gameState.players.delete(data.id);
+                }
+            });
+        } else {
+            gameState.players.delete(data.id);
+        }
+        
+        // Mostra un messaggio
+        const playerName = sprite.children[2].text || 'Un giocatore';
+        showMessage(`${playerName} è uscito`, 'info');
+    }
+}
+
+// Abilita la modalità offline (solo per sviluppo)
+function enableOfflineMode() {
+    console.log("Attivazione modalità offline per sviluppo");
+    
+    // Crea un giocatore locale se non esiste
+    if (!gameState.players.has(gameState.playerId)) {
+        const localPlayer = createPlayerSprite(gameState.playerId, true);
+        gameState.players.set(gameState.playerId, localPlayer);
+        gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
+    }
+    
+    // Crea bot automatici per testing
+    for (let i = 0; i < 5; i++) {
+        const botId = 'bot-' + i;
+        const botPlayer = createPlayerSprite(botId, false);
+        botPlayer.x = Math.random() * (app.renderer.width - 100) + 50;
+        botPlayer.y = Math.random() * (app.renderer.height - 100) + 50;
+        botPlayer.targetX = botPlayer.x;
+        botPlayer.targetY = botPlayer.y;
+        botPlayer.children[2].text = 'Bot ' + (i + 1);
+        gameState.players.set(botId, botPlayer);
+        
+        // Movimento casuale dei bot
+        const botMovementInterval = setInterval(() => {
+            const targetX = Math.random() * (app.renderer.width - 100) + 50;
+            const targetY = Math.random() * (app.renderer.height - 100) + 50;
+            
+            // Interpolazione graduale verso la nuova posizione
+            gsap.to(botPlayer, {
+                targetX: targetX,
+                targetY: targetY,
+                duration: 2,
+                ease: "power1.inOut"
+            });
+        }, 3000); // Cambia direzione ogni 3 secondi
+        
+        // Salva l'interval ID per fermarlo se necessario
+        if (!gameState.offlineIntervals) gameState.offlineIntervals = [];
+        gameState.offlineIntervals.push(botMovementInterval);
+    }
+    
+    // Inizializza i punti energia
+    initEnergyPoints();
+    
+    // Mostra un messaggio
+    showMessage('Modalità offline attivata (sviluppo)', 'info');
 }
 
 // Aggiorna la classifica dei giocatori
@@ -1547,4 +3323,936 @@ function checkLevelUp(player) {
         // Aggiorna visivamente il giocatore
         updatePlayerAppearance(player, oldLevel, newLevel);
     }
-} 
+}
+
+// Funzione per aggiornare tutti gli oggetti di gioco dopo ripristino del contesto
+function refreshGameObjects() {
+    // Ricrea tutti gli oggetti necessari dopo un ripristino del contesto WebGL
+    if (!app || !app.stage) return;
+    
+    // Pulisci gli stage vecchi
+    app.stage.removeChildren();
+    
+    // Ricrea tutti i giocatori
+    gameState.players.forEach((oldPlayer, id) => {
+        const isLocalPlayer = (id === gameState.playerId);
+        const newPlayer = createPlayerSprite(id, isLocalPlayer, oldPlayer.size);
+        
+        if (newPlayer) {
+            // Trasferisci proprietà importanti
+            newPlayer.x = oldPlayer.x;
+            newPlayer.y = oldPlayer.y;
+            newPlayer.targetX = oldPlayer.targetX;
+            newPlayer.targetY = oldPlayer.targetY;
+            newPlayer.score = oldPlayer.score;
+            
+            // Aggiorna il riferimento nel gameState
+            gameState.players.set(id, newPlayer);
+        }
+    });
+    
+    // Ricrea i punti energia
+    const oldEnergyPoints = Array.from(gameState.energyPoints.entries());
+    gameState.energyPoints.clear();
+    
+    oldEnergyPoints.forEach(([id, oldPoint]) => {
+        const newPoint = spawnEnergyPointAt(oldPoint.x, oldPoint.y);
+        if (newPoint) {
+            gameState.energyPoints.set(id, newPoint);
+        }
+    });
+    
+    // Ricrea i proiettili attivi
+    if (gameState.projectiles && gameState.projectiles.length > 0) {
+        const oldProjectiles = [...gameState.projectiles];
+        gameState.projectiles = [];
+        
+        oldProjectiles.forEach(oldProj => {
+            if (oldProj.ownerId) {
+                const owner = gameState.players.get(oldProj.ownerId);
+                if (owner) {
+                    const direction = {
+                        x: oldProj.vx / 10, // Normalizza la velocità
+                        y: oldProj.vy / 10
+                    };
+                    createProjectile(owner, direction);
+                }
+            }
+        });
+    }
+    
+    // Aggiorna tutti gli effetti visivi di abilità attive
+    if (gameState.abilities.active.speed && gameState.playerId) {
+        const player = gameState.players.get(gameState.playerId);
+        if (player) {
+            createSpeedEffect(player);
+        }
+    }
+    
+    if (gameState.abilities.active.shield && gameState.playerId) {
+        const player = gameState.players.get(gameState.playerId);
+        if (player) {
+            createShieldEffect(player);
+        }
+    }
+}
+
+// Funzione per creare un punto energia in una posizione specifica (per il ripristino)
+function spawnEnergyPointAt(x, y) {
+    // Verifica che app sia inizializzato
+    if (!app || !app.stage) {
+        console.error("PixiJS non è stato inizializzato correttamente");
+        return null;
+    }
+    
+    const id = crypto.randomUUID();
+    
+    // Crea lo sprite del punto energia
+    const energyPoint = new PIXI.Graphics();
+    energyPoint.beginFill(0x00ffff);
+    energyPoint.drawCircle(0, 0, 8);
+    energyPoint.endFill();
+    
+    // Aggiungi un effetto glow
+    const glow = new PIXI.Graphics();
+    glow.beginFill(0x00ffff, 0.3);
+    glow.drawCircle(0, 0, 12);
+    glow.endFill();
+    
+    // Crea un container
+    const container = new PIXI.Container();
+    container.addChild(glow);
+    container.addChild(energyPoint);
+    container.x = x;
+    container.y = y;
+    container.value = ENERGY_VALUE;
+    
+    // Aggiungi al gioco
+    app.stage.addChild(container);
+    
+    // Aggiungi animazione pulse
+    if (typeof gsap !== 'undefined') {
+        gsap.to(container.scale, {
+            x: 1.2,
+            y: 1.2,
+            duration: 0.8,
+            repeat: -1,
+            yoyo: true
+        });
+    }
+    
+    return container;
+}
+
+// Rileva e correggi automaticamente i problemi di rendering
+function setupAutomaticRecovery() {
+    // Controllo periodico dello stato del rendering
+    const recoveryInterval = setInterval(() => {
+        // Se il contesto è perso da troppo tempo, tenta il ripristino forzato
+        if (gameState.contextLost) {
+            const timeSinceLost = Date.now() - gameState.contextLostTime;
+            
+            if (timeSinceLost > 5000) { // 5 secondi
+                console.warn("Tentativo di recupero forzato del contesto...");
+                
+                // Tenta di passare al renderer Canvas se non ci siamo già
+                if (app && app.renderer.type === PIXI.RENDERER_TYPE.WEBGL) {
+                    reinitWithCanvasRenderer();
+                } else {
+                    // Se siamo già in Canvas o altro, ricrea tutto
+                    initGame();
+                }
+            }
+        }
+        
+        // Verifica anche se l'app è in esecuzione ma ci sono problemi di rendering
+        if (app && app.ticker.started) {
+            // Se il giocatore locale non è visibile ma dovrebbe esserlo
+            const localPlayer = gameState.players.get(gameState.playerId);
+            if (localPlayer && !localPlayer.visible && !gameState.contextLost) {
+                console.warn("Rilevato problema di visibilità, tentativo di recupero...");
+                refreshGameObjects();
+            }
+        }
+    }, 10000); // Controlla ogni 10 secondi
+    
+    // Memorizza il riferimento per fermare il controllo se necessario
+    gameState.recoveryInterval = recoveryInterval;
+}
+
+// Modifica la funzione initGame per usare il nuovo sistema di recupero
+function initGame() {
+    console.log("Inizializzazione del gioco");
+    
+    const success = initPixiJS();
+    if (!success) {
+        console.error("Fallimento nell'inizializzazione di PixiJS");
+        showMessage("Impossibile inizializzare il gioco. Prova un browser diverso o controlla la console per dettagli.", "error");
+        
+        // Torna alla schermata di login dopo un errore
+        setTimeout(() => {
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('game-container').style.display = 'none';
+        }, 3000);
+        
+        return;
+    }
+    
+    // Inizializza il contatore FPS
+    initFpsCounter();
+    
+    // Inizializza sfondo
+    createBackground();
+    
+    // Inizializza punti energia
+    initEnergyPoints();
+    
+    // Nasconde la schermata di login
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    
+    // Inizializza controlli
+    setupControls();
+    
+    // Connetti al server
+    connectWebSocket();
+    
+    // Attiva il sistema di recupero automatico
+    setupAutomaticRecovery();
+    
+    // Imposta il loop di gioco principale
+    app.ticker.add(delta => {
+        if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+        
+        updateMovement(delta);
+        interpolatePlayers(delta);
+        updateEnergyPoints(delta);
+        
+        // Aggiorna contatore FPS
+        updateFpsCounter(app.ticker.FPS);
+    });
+    
+    console.log("Gioco inizializzato con successo");
+}
+
+// Aggiorna il gameState per tracciare lo stato del contesto WebGL
+gameState.contextLost = false;
+gameState.contextLostTime = 0;
+gameState.recoveryInterval = null;
+
+// Modifica la funzione createBackground per supportare la mappa più grande
+function createBackground() {
+  // Rimuovi lo sfondo esistente
+  if (gameState.background) {
+    if (gameState.background.parent) {
+      gameState.background.parent.removeChild(gameState.background);
+    }
+    gameState.background = null;
+  }
+  
+  // Crea un nuovo container per lo sfondo
+  const background = new PIXI.Container();
+  
+  // Crea lo sfondo principale
+  const mainBg = new PIXI.Graphics();
+  mainBg.beginFill(0x0a0a0a);
+  mainBg.drawRect(0, 0, WORLD_CONFIG.width, WORLD_CONFIG.height);
+  mainBg.endFill();
+  background.addChild(mainBg);
+  
+  // Aggiungi una griglia per migliorare la percezione di profondità
+  const grid = new PIXI.Graphics();
+  grid.lineStyle(1, 0x222222, 0.3);
+  
+  // Linee orizzontali
+  for (let y = 0; y <= WORLD_CONFIG.height; y += 100) {
+    grid.moveTo(0, y);
+    grid.lineTo(WORLD_CONFIG.width, y);
+  }
+  
+  // Linee verticali
+  for (let x = 0; x <= WORLD_CONFIG.width; x += 100) {
+    grid.moveTo(x, 0);
+    grid.lineTo(x, WORLD_CONFIG.height);
+  }
+  
+  background.addChild(grid);
+  
+  // Aggiungi bordo al mondo
+  const border = new PIXI.Graphics();
+  border.lineStyle(5, 0x00ff88, 0.5);
+  border.drawRect(0, 0, WORLD_CONFIG.width, WORLD_CONFIG.height);
+  background.addChild(border);
+  
+  // Aggiungi particelle decorative casuali sullo sfondo
+  const particles = new PIXI.Container();
+  background.addChild(particles);
+  
+  for (let i = 0; i < 200; i++) {
+    const particle = new PIXI.Graphics();
+    const size = Math.random() * 3 + 1;
+    const alpha = Math.random() * 0.3 + 0.1;
+    
+    particle.beginFill(0x00ffff, alpha);
+    particle.drawCircle(0, 0, size);
+    particle.endFill();
+    
+    particle.x = Math.random() * WORLD_CONFIG.width;
+    particle.y = Math.random() * WORLD_CONFIG.height;
+    
+    particles.addChild(particle);
+    
+    // Animazione particelle
+    gsap.to(particle, {
+      alpha: 0.1,
+      duration: 2 + Math.random() * 4,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut"
+    });
+  }
+  
+  // Memorizza lo sfondo nel gameState
+  gameState.background = background;
+  
+  // Aggiungi lo sfondo al mondo della camera
+  gameState.camera.addToWorld(background);
+  
+  return background;
+}
+
+// Modifica initEnergyPoints per distribuire i punti energia sulla mappa grande
+function initEnergyPoints() {
+  // Rimuovi punti energia esistenti
+  if (gameState.energyPoints) {
+    gameState.energyPoints.forEach(point => {
+      if (point.parent) point.parent.removeChild(point);
+    });
+  }
+  
+  gameState.energyPoints = [];
+  
+  // Numero di punti proporzionale alla dimensione della mappa
+  const pointsCount = Math.floor(WORLD_CONFIG.width * WORLD_CONFIG.height / 20000);
+  
+  for (let i = 0; i < pointsCount; i++) {
+    const padding = 100;
+    const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+    const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+    
+    const energyPoint = createEnergyPoint(x, y);
+    gameState.energyPoints.push(energyPoint);
+  }
+  
+  console.log(`Creati ${pointsCount} punti energia sulla mappa`);
+}
+
+// Funzione per creare un singolo punto energia
+function createEnergyPoint(x, y) {
+  const energyPoint = new PIXI.Graphics();
+  energyPoint.beginFill(0x00ff88, 0.7);
+  energyPoint.drawCircle(0, 0, 10);
+  energyPoint.endFill();
+  
+  // Aggiungi effetto glow
+  if (PIXI.filters && PIXI.filters.GlowFilter) {
+    energyPoint.filters = [new PIXI.filters.GlowFilter(15, 2, 1, 0x00ff88, 0.5)];
+  }
+  
+  energyPoint.x = x;
+  energyPoint.y = y;
+  
+  // Animazione pulsante
+  gsap.to(energyPoint.scale, {
+    x: 1.2,
+    y: 1.2,
+    duration: 0.8,
+    repeat: -1,
+    yoyo: true,
+    ease: "sine.inOut"
+  });
+  
+  // Aggiungi al mondo
+  gameState.camera.addToWorld(energyPoint);
+  
+  return energyPoint;
+}
+
+// Modifica la funzione createPlayerSprite per adattarsi alla camera
+function createPlayerSprite(id, isLocal, size = INITIAL_SIZE) {
+  // ... il codice esistente ...
+  
+  // Al posto di app.stage.addChild(container)
+  if (container && gameState.camera) {
+    gameState.camera.addToWorld(container);
+  }
+  
+  return container;
+}
+
+// Modifica initGame per inizializzare la camera
+function initGame() {
+  console.log("Inizializzazione del gioco");
+  
+  const success = initPixiJS();
+  if (!success) {
+    console.error("Fallimento nell'inizializzazione di PixiJS");
+    showMessage("Impossibile inizializzare il gioco. Prova un browser diverso o controlla la console per dettagli.", "error");
+    
+    // Torna alla schermata di login dopo un errore
+    setTimeout(() => {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('game-container').style.display = 'none';
+    }, 3000);
+    
+    return;
+  }
+  
+  // Inizializza la camera prima del resto
+  if (!gameState.camera.init(app)) {
+    console.error("Errore nell'inizializzazione della camera");
+    return;
+  }
+  
+  // Inizializza il contatore FPS e aggiungilo all'UI
+  initFpsCounter();
+  if (gameState.fpsCounter && gameState.camera) {
+    gameState.camera.addToUI(gameState.fpsCounter);
+  }
+  
+  // Inizializza sfondo
+  createBackground();
+  
+  // Inizializza punti energia
+  initEnergyPoints();
+  
+  // Inizializza minimappa
+  createMinimap();
+  
+  // Nasconde la schermata di login
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('game-container').style.display = 'block';
+  
+  // Inizializza controlli
+  setupControls();
+  
+  // Connetti al server
+  connectWebSocket();
+  
+  // Attiva il sistema di recupero automatico
+  setupAutomaticRecovery();
+  
+  // Imposta il loop di gioco principale
+  app.ticker.add(delta => {
+    if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+    
+    // Aggiorna movimento
+    updateMovement(delta);
+    
+    // Aggiorna camera
+    updateCamera(delta);
+    
+    // Interpolazione altri giocatori
+    interpolateOtherPlayers(delta);
+    
+    // Aggiorna punti energia
+    updateEnergyPoints(delta);
+    
+    // Aggiorna contatore FPS
+    updateFpsCounter(app.ticker.FPS);
+    
+    // Aggiorna minimappa
+    updateMinimap();
+  });
+  
+  console.log("Gioco inizializzato con successo");
+}
+
+// Funzione per aggiornare la camera
+function updateCamera(delta) {
+  // Se non c'è camera o giocatore, non fare nulla
+  if (!gameState.camera || !gameState.players.has(gameState.playerId)) return;
+  
+  const player = gameState.players.get(gameState.playerId);
+  
+  // Segui il giocatore
+  gameState.camera.follow(player);
+  
+  // Aggiorna lo zoom in base al numero di giocatori e dimensione del player
+  gameState.camera.updateZoom(
+    gameState.players.size,
+    player.size || INITIAL_SIZE
+  );
+  
+  // Aggiorna la camera
+  gameState.camera.update(delta);
+}
+
+// Funzione per creare la minimappa
+function createMinimap() {
+  if (!gameState.camera) return;
+  
+  // Container per la minimappa
+  const minimapContainer = new PIXI.Container();
+  
+  // Dimensione della minimappa
+  const minimapSize = 150;
+  const padding = 10;
+  
+  // Sfondo
+  const background = new PIXI.Graphics();
+  background.beginFill(0x000000, 0.5);
+  background.drawRoundedRect(0, 0, minimapSize, minimapSize, 5);
+  background.endFill();
+  minimapContainer.addChild(background);
+  
+  // Bordo del mondo
+  const worldBorder = new PIXI.Graphics();
+  worldBorder.lineStyle(1, 0x00ff88, 0.8);
+  worldBorder.drawRect(5, 5, minimapSize - 10, minimapSize - 10);
+  minimapContainer.addChild(worldBorder);
+  
+  // Container per punti dei giocatori
+  const playersContainer = new PIXI.Container();
+  minimapContainer.addChild(playersContainer);
+  
+  // Posiziona la minimappa nell'angolo
+  minimapContainer.x = app.renderer.width - minimapSize - padding;
+  minimapContainer.y = app.renderer.height - minimapSize - padding;
+  
+  // Memorizza riferimenti nel gameState
+  gameState.minimap = {
+    container: minimapContainer,
+    playersContainer: playersContainer,
+    size: minimapSize,
+    worldRatio: Math.min(
+      (minimapSize - 10) / WORLD_CONFIG.width,
+      (minimapSize - 10) / WORLD_CONFIG.height
+    )
+  };
+  
+  // Aggiungi la minimappa all'UI (non influenzata dalla camera)
+  gameState.camera.addToUI(minimapContainer);
+}
+
+// Funzione per aggiornare la minimappa
+function updateMinimap() {
+  if (!gameState.minimap || !gameState.minimap.playersContainer) return;
+  
+  // Pulisci i vecchi punti
+  gameState.minimap.playersContainer.removeChildren();
+  
+  // Disegna un punto per ogni giocatore
+  gameState.players.forEach((player, id) => {
+    const isLocalPlayer = id === gameState.playerId;
+    
+    // Crea punto
+    const point = new PIXI.Graphics();
+    
+    // Dimensione basata sulla dimensione del giocatore
+    const pointSize = Math.max(3, Math.min(8, player.size / 30));
+    
+    // Colori diversi per giocatore locale e altri
+    point.beginFill(isLocalPlayer ? 0x00ff00 : 0xff3333, 0.8);
+    point.drawCircle(0, 0, pointSize);
+    point.endFill();
+    
+    // Posizione proporzionale alla mappa
+    point.x = 5 + player.x * gameState.minimap.worldRatio;
+    point.y = 5 + player.y * gameState.minimap.worldRatio;
+    
+    // Aggiungi punto alla minimappa
+    gameState.minimap.playersContainer.addChild(point);
+    
+    // Se è il giocatore locale, aggiungi indicatore di direzione
+    if (isLocalPlayer) {
+      const viewRect = new PIXI.Graphics();
+      viewRect.lineStyle(1, 0x00ff00, 0.5);
+      
+      // Calcola visuale corrente
+      const viewWidth = app.renderer.width / gameState.camera.zoom;
+      const viewHeight = app.renderer.height / gameState.camera.zoom;
+      const viewX = gameState.camera.x - viewWidth/2;
+      const viewY = gameState.camera.y - viewHeight/2;
+      
+      // Disegna rettangolo di visuale sulla minimappa
+      viewRect.drawRect(
+        5 + viewX * gameState.minimap.worldRatio,
+        5 + viewY * gameState.minimap.worldRatio,
+        viewWidth * gameState.minimap.worldRatio,
+        viewHeight * gameState.minimap.worldRatio
+      );
+      
+      gameState.minimap.playersContainer.addChild(viewRect);
+    }
+  });
+}
+
+// Sistema di rendering ottimizzato
+const renderQualityManager = {
+  settings: {
+    maxParticles: 500,
+    qualityLevels: {
+      low: {
+        resolution: 0.5,
+        antialias: false,
+        particleDensity: 0.3,
+        maxParticles: 100,
+        filterLevel: 0
+      },
+      medium: {
+        resolution: 0.8,
+        antialias: true,
+        particleDensity: 0.6,
+        maxParticles: 300,
+        filterLevel: 1
+      },
+      high: {
+        resolution: 1.0,
+        antialias: true,
+        particleDensity: 1.0,
+        maxParticles: 500,
+        filterLevel: 2
+      }
+    },
+    autoAdjust: true,
+    currentQuality: 'medium',
+    fpsTarget: 55,
+    fpsLow: 25,
+    fpsHistory: []
+  },
+  
+  // Rileva il livello di prestazioni del dispositivo
+  detectPerformanceLevel() {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      
+      if (!gl) return 'low';
+      
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isOldDevice = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
+      
+      // Valuta il device
+      if (isMobile || isOldDevice) {
+        return 'medium';
+      } else {
+        // Info sulla GPU se disponibile
+        const gpuInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (gpuInfo) {
+          const renderer = gl.getParameter(gpuInfo.UNMASKED_RENDERER_WEBGL);
+          if (renderer) {
+            // Rileva GPU di bassa potenza
+            const lowEndGPUs = ['intel', 'hd graphics', 'intelhd', 'gma', 'mesa'];
+            if (lowEndGPUs.some(gpu => renderer.toLowerCase().includes(gpu))) {
+              return 'medium';
+            }
+          }
+        }
+        
+        return 'high';
+      }
+    } catch (e) {
+      console.warn('Errore nel rilevamento prestazioni:', e);
+      return 'medium'; // Default
+    }
+  },
+  
+  // Applica le impostazioni di qualità
+  applyQuality(level) {
+    if (!this.settings.qualityLevels[level]) {
+      console.error(`Livello di qualità non valido: ${level}`);
+      return false;
+    }
+    
+    const settings = this.settings.qualityLevels[level];
+    this.settings.currentQuality = level;
+    
+    // Applica le impostazioni di rendering se PIXI è inizializzato
+    if (app && app.renderer) {
+      console.log(`Applicazione qualità ${level}: resolution=${settings.resolution}`);
+      
+      // Imposta la risoluzione del renderer
+      app.renderer.resolution = settings.resolution;
+      
+      // Gestisci i filtri in base al livello di qualità
+      this.updateFilters(settings.filterLevel);
+      
+      // Memorizza la densità particelle per futuri effetti
+      gameState.particleDensity = settings.particleDensity;
+      gameState.maxParticles = settings.maxParticles;
+    }
+    
+    return true;
+  },
+  
+  // Aggiorna l'uso di filtri e effetti
+  updateFilters(level) {
+    // A seconda del livello, abilita o disabilita effetti specifici
+    if (level <= 0) {
+      // Disabilita tutti gli effetti avanzati
+      gameState.useAdvancedEffects = false;
+    } else {
+      // Abilita effetti in base al livello
+      gameState.useAdvancedEffects = true;
+    }
+  },
+  
+  // Monitora gli FPS e regola la qualità automaticamente
+  monitorPerformance(fps) {
+    if (!this.settings.autoAdjust) return;
+    
+    // Mantieni una storia degli FPS
+    this.settings.fpsHistory.push(fps);
+    if (this.settings.fpsHistory.length > 30) {
+      this.settings.fpsHistory.shift();
+    }
+    
+    // Calcola la media degli FPS
+    const avgFps = this.settings.fpsHistory.reduce((sum, val) => sum + val, 0) / this.settings.fpsHistory.length;
+    
+    // Regola qualità se necessario
+    if (this.settings.fpsHistory.length >= 30) {
+      if (avgFps < this.settings.fpsLow && this.settings.currentQuality !== 'low') {
+        console.log(`Performance bassa (${avgFps.toFixed(1)} FPS): passaggio a qualità bassa`);
+        this.applyQuality('low');
+      } else if (avgFps > this.settings.fpsTarget * 1.2 && this.settings.currentQuality === 'low') {
+        console.log(`Performance buona (${avgFps.toFixed(1)} FPS): passaggio a qualità media`);
+        this.applyQuality('medium');
+      } else if (avgFps > this.settings.fpsTarget * 1.5 && this.settings.currentQuality === 'medium') {
+        console.log(`Performance eccellente (${avgFps.toFixed(1)} FPS): passaggio a qualità alta`);
+        this.applyQuality('high');
+      }
+    }
+  },
+  
+  // Inizializza il gestore qualità
+  init() {
+    // Rileva e imposta la qualità iniziale
+    const initialQuality = this.detectPerformanceLevel();
+    console.log(`Livello prestazioni rilevato: ${initialQuality}`);
+    this.applyQuality(initialQuality);
+    
+    // Aggiungi dati alla configurazione di gioco
+    gameState.particleDensity = this.settings.qualityLevels[initialQuality].particleDensity;
+    gameState.maxParticles = this.settings.qualityLevels[initialQuality].maxParticles;
+    gameState.useAdvancedEffects = initialQuality !== 'low';
+    
+    return initialQuality;
+  }
+};
+
+// Sistema per aggiornare il contatore FPS e monitorare prestazioni
+function updateFpsCounter(fps) {
+  if (!gameState.fpsCounter) return;
+  
+  // Aggiorna il testo del contatore FPS
+  gameState.fpsCounter.text = `FPS: ${Math.round(fps)}`;
+  
+  // Colora il testo in base alla performance
+  if (fps >= 50) {
+    gameState.fpsCounter.style.fill = 0x00ff00;
+  } else if (fps >= 30) {
+    gameState.fpsCounter.style.fill = 0xffff00;
+  } else {
+    gameState.fpsCounter.style.fill = 0xff0000;
+  }
+  
+  // Monitora le prestazioni per regolare la qualità
+  if (renderQualityManager) {
+    renderQualityManager.monitorPerformance(fps);
+  }
+}
+
+// Modifica la funzione initGame per usare il sistema di qualità
+function initGame() {
+  console.log("Inizializzazione del gioco");
+  
+  // Inizializza il gestore qualità prima di tutto
+  const qualityLevel = renderQualityManager.init();
+  console.log(`Inizializzazione del gioco con qualità: ${qualityLevel}`);
+  
+  // Inizializza PixiJS con le impostazioni appropriate
+  const success = initPixiJS();
+  if (!success) {
+    console.error("Fallimento nell'inizializzazione di PixiJS");
+    showMessage("Impossibile inizializzare il gioco. Prova un browser diverso o controlla la console per dettagli.", "error");
+    
+    // Torna alla schermata di login dopo un errore
+    setTimeout(() => {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('game-container').style.display = 'none';
+    }, 3000);
+    
+    return;
+  }
+  
+  // Inizializza la camera prima del resto
+  if (!gameState.camera.init(app)) {
+    console.error("Errore nell'inizializzazione della camera");
+    return;
+  }
+  
+  // Inizializza il contatore FPS e aggiungilo all'UI
+  initFpsCounter();
+  if (gameState.fpsCounter && gameState.camera) {
+    gameState.camera.addToUI(gameState.fpsCounter);
+  }
+  
+  // Inizializza sfondo
+  createBackground();
+  
+  // Inizializza punti energia
+  initEnergyPoints();
+  
+  // Inizializza minimappa
+  createMinimap();
+  
+  // Nasconde la schermata di login
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('game-container').style.display = 'block';
+  
+  // Rileva e configura controlli mobile se necessario
+  setupControls();
+  
+  // Connetti al server
+  connectWebSocket();
+  
+  // Attiva il sistema di recupero automatico
+  setupAutomaticRecovery();
+  
+  // Imposta il loop di gioco principale
+  app.ticker.add(delta => {
+    if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+    
+    // Aggiorna movimento
+    updateMovement(delta);
+    
+    // Aggiorna camera
+    updateCamera(delta);
+    
+    // Interpolazione altri giocatori
+    interpolateOtherPlayers(delta);
+    
+    // Aggiorna punti energia
+    updateEnergyPoints(delta);
+    
+    // Aggiorna contatore FPS
+    updateFpsCounter(app.ticker.FPS);
+    
+    // Aggiorna minimappa
+    updateMinimap();
+  });
+  
+  console.log("Gioco inizializzato con successo");
+}
+
+// Aggiorna il gameState per tracciare lo stato del contesto WebGL
+gameState.contextLost = false;
+gameState.contextLostTime = 0;
+gameState.recoveryInterval = null;
+
+// Classe per la predizione avanzata del movimento
+class MovementPredictor {
+  constructor() {
+    this.buffer = [];
+    this.latency = 100; // Latenza simulata in ms
+    this.maxSamples = 10; // Massimo numero di snapshot da memorizzare
+    this.lastReconciliation = 0; // Timestamp dell'ultima riconciliazione
+    
+    // Stato attuale predetto
+    this.current = null;
+    
+    // Tolleranza per riconciliazione (quanto deve essere grande la differenza)
+    this.reconciliationThreshold = 50;
+  }
+  
+  // Aggiungi un nuovo snapshot al buffer
+  addSnapshot(snapshot) {
+    if (!snapshot) return;
+    
+    this.buffer.push({
+      ...snapshot,
+      timestamp: Date.now()
+    });
+    
+    // Mantieni solo gli ultimi N snapshot
+    if (this.buffer.length > this.maxSamples) {
+      this.buffer.shift();
+    }
+  }
+  
+  // Predici lo stato attuale in base al buffer di snapshot
+  predict(currentState) {
+    // Se non abbiamo abbastanza dati o uno stato corrente, ritorna quello che abbiamo
+    if (this.buffer.length < 2 || !currentState) {
+      this.current = currentState;
+      return currentState;
+    }
+    
+    const now = Date.now();
+    const renderTime = now - this.latency;
+    
+    // Trova i due snapshot più vicini al tempo di rendering
+    let prev = this.buffer[0];
+    let next = this.buffer[1];
+    
+    for (let i = 1; i < this.buffer.length; i++) {
+      if (this.buffer[i].timestamp > renderTime) {
+        prev = this.buffer[i-1];
+        next = this.buffer[i];
+        break;
+      }
+    }
+    
+    // Se non abbiamo snapshot validi, ritorna lo stato corrente
+    if (!prev || !next || prev.timestamp === next.timestamp) {
+      this.current = currentState;
+      return currentState;
+    }
+    
+    // Calcola il fattore di interpolazione (0-1)
+    const t = Math.max(0, Math.min(1, (renderTime - prev.timestamp) / (next.timestamp - prev.timestamp)));
+    
+    // Interpola tra i due stati
+    const predicted = {
+      x: prev.x + (next.x - prev.x) * t,
+      y: prev.y + (next.y - prev.y) * t
+    };
+    
+    // Aggiorna lo stato corrente
+    this.current = predicted;
+    return predicted;
+  }
+  
+  // Riconcilia la predizione con lo stato effettivo dal server
+  reconcile(serverState) {
+    if (!this.current || !serverState) return serverState;
+    
+    // Calcola la differenza tra lo stato predetto e quello del server
+    const dx = serverState.x - this.current.x;
+    const dy = serverState.y - this.current.y;
+    const distance = Math.sqrt(dx*dx + dy*dy);
+    
+    // Se la differenza è troppo grande, applica una correzione graduale
+    if (distance > this.reconciliationThreshold) {
+      console.log(`Riconciliazione stato: differenza ${distance.toFixed(2)}px`);
+      
+      // Applica correzione al 20% per evitare teletrasporti bruschi
+      const correctionFactor = 0.2;
+      const corrected = {
+        x: this.current.x + dx * correctionFactor,
+        y: this.current.y + dy * correctionFactor
+      };
+      
+      this.lastReconciliation = Date.now();
+      return corrected;
+    }
+    
+    // Se la differenza è accettabile, mantieni lo stato corrente
+    return this.current;
+  }
+}
+
+// Aggiungi il predictor al gameState
+gameState.movementPredictor = new MovementPredictor();
