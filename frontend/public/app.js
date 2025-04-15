@@ -4,7 +4,7 @@ let socket;
 let reconnectAttempts = 0;
 const msgpack = window.msgpack5();
 
-// Configurazione delle dimensioni del mondo di gioco
+// Configurazione mondo di gioco
 const WORLD_CONFIG = {
   width: 3000,
   height: 3000,
@@ -3535,3 +3535,40 @@ function handleDeviceOrientation() {
 
         // Verifica le dimensioni e orientamento per dispositivi mobili
         handleDeviceOrientation();
+
+// Funzione per ottenere variabili d'ambiente
+function getEnvVar(name, defaultValue) {
+  if (typeof window !== 'undefined' && window.env && window.env[name]) {
+    return window.env[name];
+  }
+  return defaultValue;
+}
+
+// Gestione del ridimensionamento
+function setupResizeHandler() {
+  window.addEventListener('resize', () => {
+    if (!app || !app.renderer) return;
+    
+    // Aggiorna le dimensioni del renderer
+    app.renderer.resize(window.innerWidth, window.innerHeight);
+    
+    // Aggiorna posizione della minimappa
+    if (gameState.minimap && gameState.minimap.container) {
+      const minimapSize = gameState.minimap.size;
+      const padding = 10;
+      gameState.minimap.container.x = app.renderer.width - minimapSize - padding;
+      gameState.minimap.container.y = app.renderer.height - minimapSize - padding;
+    }
+    
+    // Aggiorna posizione del contatore FPS
+    if (gameState.fpsCounter) {
+      gameState.fpsCounter.x = 10;
+      gameState.fpsCounter.y = 10;
+    }
+    
+    // Verifica orientamento per dispositivi mobili
+    if (typeof handleDeviceOrientation === 'function') {
+      handleDeviceOrientation();
+    }
+  });
+}
