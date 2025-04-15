@@ -50,7 +50,7 @@ function updateEnergyPoints(delta) {
       
       // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
       setTimeout(() => {
-        if (!gameState.energyPoints[index]) return;
+        if (!gameState.energyPoints || typeof gameState.energyPoints.has !== 'function' || !gameState.energyPoints.has(index)) return;
         
         // Nuova posizione casuale
         const padding = 100;

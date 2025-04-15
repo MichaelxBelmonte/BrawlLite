@@ -187,7 +187,7 @@ const renderQualityManager = {
     gameState.useAdvancedEffects = initialQuality !== 'low';
     
     return initialQuality;
-  }
+  },
 };
 
 // Estensione della classe DynamicCamera con funzionalità avanzate
@@ -509,7 +509,7 @@ function updateFpsCounter(fps) {
   // Monitora le prestazioni per regolare la qualità
   if (renderQualityManager) {
     renderQualityManager.monitorPerformance(fps);
-  }
+  });
 }
 
 function isMobileDevice() {
@@ -598,73 +598,7 @@ function initGame() {
   });
   
   // Includi la funzione updateEnergyPoints dal file separato
-  // Funzione per aggiornare i punti energia sulla mappa
-  function updateEnergyPoints(delta) {
-    if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
-    
-    const localPlayer = gameState.players.get(gameState.playerId);
-    if (!localPlayer) return;
-    
-    // Controlla collisioni con i punti energia
-    gameState.energyPoints.forEach((point, index) => {
-      // Salta punti già raccolti
-      if (!point.visible) return;
-      
-      // Calcola distanza tra giocatore e punto energia
-      const dx = localPlayer.x - point.x;
-      const dy = localPlayer.y - point.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Se il giocatore tocca il punto energia
-      if (distance < localPlayer.size + 10) {
-        // Nascondi il punto energia
-        point.visible = false;
-        
-        // Aumenta la dimensione del giocatore
-        const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
-        localPlayer.size = newSize;
-        
-        // Aggiorna la grafica del giocatore
-        if (localPlayer.sprite) {
-          localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
-        }
-        
-        // Crea effetto particellare se abilitato
-        if (gameState.useAdvancedEffects) {
-          createParticleEffect(point.x, point.y, 0x00ff88, 20);
-        }
-        
-        // Invia aggiornamento al server
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          const message = {
-            type: 'collectEnergy',
-            id: gameState.playerId,
-            size: newSize,
-            pointIndex: index
-          };
-          socket.send(msgpack.encode(message));
-        }
-        
-        // Controlla se il giocatore ha raggiunto un nuovo livello
-        checkLevelUp(newSize);
-        
-        // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
-        setTimeout(() => {
-          if (!gameState.energyPoints.has(index)) return;
-          
-          // Nuova posizione casuale
-          const padding = 100;
-          const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
-          const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
-          
-          point.x = x;
-          point.y = y;
-          point.visible = true;
-        }, 10000); // 10 secondi
-      }
-    });
-  }
-  
+  // Includi la funzione updateEnergyPoints dal file separato
   console.log("Gioco inizializzato con successo");
 }
 
@@ -720,7 +654,7 @@ function updateEnergyPoints(delta) {
       
       // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
       setTimeout(() => {
-        if (!gameState.energyPoints[index]) return;
+        if (!gameState.energyPoints || typeof gameState.energyPoints.has !== 'function' || !gameState.energyPoints.has(index)) return;
         
         // Nuova posizione casuale
         const padding = 100;
@@ -760,7 +694,7 @@ function checkLevelUp(newSize) {
     if (levelInfo.ability) {
       showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
     }
-  }
+  });
 }
 
 // Funzione per ottenere il nome dell'abilità
@@ -820,7 +754,7 @@ function createParticleEffect(x, y, color, count) {
         app.ticker.remove(arguments.callee);
       }
     });
-  }
+  });
 }
 
 // Funzione per aggiornare la camera
@@ -1230,14 +1164,13 @@ function updateMovement(delta) {
 function checkEnergyCollisions() {
   // Ottieni il giocatore locale
   const player = gameState.players.get(gameState.playerId);
-  if (!player || !gameState.energyPoints || !gameState.energyPoints.length) return;
+  if (!player || !gameState.energyPoints || gameState.energyPoints.size === 0) return;
   
   // Raggio effettivo per collisione
   const playerRadius = player.size / 2;
   
   // Per ogni punto energia, verifica la collisione
-  for (let i = gameState.energyPoints.length - 1; i >= 0; i--) {
-    const point = gameState.energyPoints[i];
+  gameState.energyPoints.forEach((point, i) => {
     
     // Calcola distanza
     const dx = player.x - point.x;
@@ -1251,8 +1184,8 @@ function checkEnergyCollisions() {
         point.parent.removeChild(point);
       }
       
-      // Rimuovi dall'array
-      gameState.energyPoints.splice(i, 1);
+      // Rimuovi dalla mappa
+      gameState.energyPoints.delete(i);
       
       // Incrementa punteggio e dimensione
       player.score += 10;
@@ -1280,9 +1213,10 @@ function checkEnergyCollisions() {
       const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
       
       const newPoint = createEnergyPoint(x, y);
-      gameState.energyPoints.push(newPoint);
+      const newId = Date.now() + Math.random().toString(36).substr(2, 9);
+      gameState.energyPoints.set(newId, newPoint);
     }
-  }
+  });
 }
 
 // Funzione per aggiornare la dimensione del giocatore
@@ -1357,7 +1291,7 @@ function checkLevelUp(player) {
         showMessage(`Hai sbloccato l'abilità: ${levelData.ability.toUpperCase()}`, 'info', 3000);
       }
     }
-  }
+  });
 }
 
 // Funzione per creare punti energia in posizioni specifiche
@@ -1515,7 +1449,7 @@ function handleStateUpdate(data) {
   // Aggiorna o crea tutti i giocatori
   data.players.forEach(playerData => {
     // Aggiungi uno snapshot per i giocatori remoti al predictor
-    if (playerData.id !== gameState.playerId) {
+    if (playerData.id !== gameState.playerId && gameState.movementPredictor) {
       gameState.movementPredictor.addSnapshot(playerData);
     }
     
@@ -1635,7 +1569,7 @@ function updateOrCreatePlayer(playerData) {
     if (playerData.color && player.children && player.children[0]) {
       player.children[0].tint = playerData.color;
     }
-  }
+  });
 }
 
 // Migliora la funzione di interpolazione per usare il predictor
@@ -1726,7 +1660,7 @@ function createMovementTrail(player, delta) {
         }
       });
     }
-  }
+  });
 }
 
 // Funzione per aggiornare l'HUD
@@ -1781,7 +1715,7 @@ function createBackgroundEffect() {
                 createParticle();
             }
         });
-    }
+    });
 }
 
 // Creiamo particelle singole per sostituire quelle che scompaiono
@@ -1968,7 +1902,7 @@ function sendToServer(data) {
     } catch (error) {
         console.error('Errore nell\'invio dei dati al server:', error);
         return false;
-    }
+    });
 }
 
 // Gestisce l'aggiornamento dello stato dal server
@@ -1976,15 +1910,23 @@ function handleStateUpdate(data) {
     // Assicurati che il giocatore locale sia sempre presente
     const localPlayerExists = gameState.players.has(gameState.playerId);
     
+    // Verifica che i dati dei giocatori siano validi
+    if (!data || !data.players || !Array.isArray(data.players)) {
+        console.warn('Dati di stato non validi ricevuti dal server');
+        return;
+    }
+    
     // Aggiorna le posizioni di tutti i giocatori
     data.players.forEach(player => {
+        if (!player || !player.id) return; // Salta giocatori senza ID
+        
         if (player.id !== gameState.playerId) {
             if (!gameState.players.has(player.id)) {
                 // Crea nuovo sprite per giocatori che non esistono ancora
                 const newPlayer = createPlayerSprite(player.id);
                 if (newPlayer) {
                     // Aggiorna il nome se disponibile
-                    if (player.name) {
+                    if (player.name && newPlayer.children && newPlayer.children[2]) {
                         newPlayer.children[2].text = player.name;
                     }
                     
@@ -2039,7 +1981,7 @@ function handleStateUpdate(data) {
                 y: Math.round(localPlayer.y)
             });
         }
-    }
+    });
 }
 
 // Gestisce l'ingresso di un nuovo giocatore
@@ -2066,7 +2008,7 @@ function handlePlayerJoin(data) {
             // Mostra un messaggio di benvenuto
             showMessage(`${data.name || 'Nuovo giocatore'} è entrato!`, 'info');
         }
-    }
+    });
 }
 
 // Gestisce il movimento di un giocatore
@@ -2084,7 +2026,7 @@ function handlePlayerMove(data) {
             sprite.targetX = sprite.targetX + data.dx;
             sprite.targetY = sprite.targetY + data.dy;
         }
-    }
+    });
 }
 
 // Gestisce l'uscita di un giocatore
@@ -2111,7 +2053,7 @@ function handlePlayerLeave(data) {
         // Mostra un messaggio
         const playerName = sprite.children[2].text || 'Un giocatore';
         showMessage(`${playerName} è uscito`, 'info');
-    }
+    });
 }
 
 // Abilita la modalità offline (solo per sviluppo)
@@ -2290,7 +2232,7 @@ function activateAbility(ability) {
         case 'attack':
             fireAttack();
             break;
-    }
+    });
 }
 
 // Abilità: Boost di velocità
@@ -2468,7 +2410,7 @@ function fireAttack() {
             dirX: direction.x,
             dirY: direction.y
         }));
-    }
+    });
 }
 
 // Crea un proiettile
@@ -2696,7 +2638,7 @@ function showMessage(text, type = 'info') {
             
             setTimeout(() => message.remove(), 300);
         }, 2000);
-    }
+    });
 }
 
 // Funzione per inizializzare i punti energia
@@ -2775,7 +2717,7 @@ function getAbilityName(ability) {
         case 'shield': return 'Scudo Energetico';
         case 'attack': return 'Raggio Letale';
         default: return ability;
-    }
+    });
 }
 
 // Restituisce il tasto per attivare l'abilità
@@ -2785,7 +2727,7 @@ function getAbilityKey(ability) {
         case 'shield': return 'e';
         case 'attack': return 'spazio';
         default: return '?';
-    }
+    });
 }
 
 // Restituisce il livello minimo per l'abilità
@@ -2893,7 +2835,7 @@ function updatePlayerSize(player, newSize) {
     const nameText = player.children[2]; // Assume che il nome sia il terzo figlio
     if (nameText) {
         nameText.y = -newSize - 15;
-    }
+    });
 }
 
 // Crea effetto visivo per la raccolta di energia
@@ -2922,7 +2864,7 @@ function createCollectEffect(x, y) {
                 app.stage.removeChild(particle);
             }
         });
-    }
+    });
 }
 
 // Controlla se un giocatore può mangiare un altro
@@ -2968,7 +2910,7 @@ function eatPlayer(player, otherPlayer, otherId) {
             score: player.score,
             size: player.size
         }));
-    }
+    });
 }
 
 // Crea effetto visivo per mangiare un giocatore
@@ -2996,7 +2938,7 @@ function createEatEffect(x, y) {
                 app.stage.removeChild(particle);
             }
         });
-    }
+    });
 }
 
 // Funzione per controllare se un giocatore ha raccolto energia
@@ -3046,7 +2988,7 @@ function collectEnergy(player, energyPoint, energyId) {
             size: player.size,
             level: gameState.level
         }));
-    }
+    });
 }
 
 // Mostra un messaggio di level up
@@ -3088,7 +3030,7 @@ function unlockAbility(ability) {
                 activateAbility(ability);
             }
         });
-    }
+    });
 }
 
 // Controlla se il giocatore è salito di livello
@@ -3121,7 +3063,7 @@ function checkLevelUp(player) {
         
         // Aggiorna visivamente il giocatore
         updatePlayerAppearance(player, oldLevel, newLevel);
-    }
+    });
 }
 
 // Funzione per aggiornare tutti gli oggetti di gioco dopo ripristino del contesto
@@ -3193,7 +3135,7 @@ function refreshGameObjects() {
         if (player) {
             createShieldEffect(player);
         }
-    }
+    });
 }
 
 // Funzione per creare un punto energia in una posizione specifica (per il ripristino)
@@ -3420,6 +3362,108 @@ function createBackground() {
   return background;
 }
 
+// Classe per la predizione avanzata del movimento
+class MovementPredictor {
+  constructor() {
+    this.buffer = [];
+    this.latency = 100; // Latenza simulata in ms
+    this.maxSamples = 10; // Massimo numero di snapshot da memorizzare
+    this.lastReconciliation = 0; // Timestamp dell'ultima riconciliazione
+    
+    // Stato attuale predetto
+    this.current = null;
+    
+    // Tolleranza per riconciliazione (quanto deve essere grande la differenza)
+    this.reconciliationThreshold = 50;
+  }
+  
+  // Aggiungi un nuovo snapshot al buffer
+  addSnapshot(snapshot) {
+    if (!snapshot) return;
+    
+    this.buffer.push({
+      ...snapshot,
+      timestamp: Date.now()
+    });
+    
+    // Mantieni solo gli ultimi N snapshot
+    if (this.buffer.length > this.maxSamples) {
+      this.buffer.shift();
+    }
+  }
+  
+  // Predici lo stato attuale in base al buffer di snapshot
+  predict(currentState) {
+    // Se non abbiamo abbastanza dati o uno stato corrente, ritorna quello che abbiamo
+    if (this.buffer.length < 2 || !currentState) {
+      this.current = currentState;
+      return currentState;
+    }
+    
+    const now = Date.now();
+    const renderTime = now - this.latency;
+    
+    // Trova i due snapshot più vicini al tempo di rendering
+    let prev = this.buffer[0];
+    let next = this.buffer[1];
+    
+    for (let i = 1; i < this.buffer.length; i++) {
+      if (this.buffer[i].timestamp > renderTime) {
+        prev = this.buffer[i-1];
+        next = this.buffer[i];
+        break;
+      }
+    }
+    
+    // Se non abbiamo snapshot validi, ritorna lo stato corrente
+    if (!prev || !next || prev.timestamp === next.timestamp) {
+      this.current = currentState;
+      return currentState;
+    }
+    
+    // Calcola il fattore di interpolazione (0-1)
+    const t = Math.max(0, Math.min(1, (renderTime - prev.timestamp) / (next.timestamp - prev.timestamp)));
+    
+    // Interpola tra i due stati
+    const predicted = {
+      x: prev.x + (next.x - prev.x) * t,
+      y: prev.y + (next.y - prev.y) * t
+    };
+    
+    // Aggiorna lo stato corrente
+    this.current = predicted;
+    return predicted;
+  }
+  
+  // Riconcilia la predizione con lo stato effettivo dal server
+  reconcile(serverState) {
+    if (!this.current || !serverState) return serverState;
+    
+    // Calcola la differenza tra lo stato predetto e quello del server
+    const dx = serverState.x - this.current.x;
+    const dy = serverState.y - this.current.y;
+    const distance = Math.sqrt(dx*dx + dy*dy);
+    
+    // Se la differenza è troppo grande, applica una correzione graduale
+    if (distance > this.reconciliationThreshold) {
+      console.log(`Riconciliazione stato: differenza ${distance.toFixed(2)}px`);
+      
+      // Applica correzione al 20% per evitare teletrasporti bruschi
+      const correctionFactor = 0.2;
+      const corrected = {
+        x: this.current.x + dx * correctionFactor,
+        y: this.current.y + dy * correctionFactor
+      };
+      
+      this.lastReconciliation = Date.now();
+      return corrected;
+    }
+    
+    // Se la differenza è accettabile, mantieni lo stato corrente
+    return this.current;
+  });
+}
+
 // Modifica initEnergyPoints per distribuire i punti energia sulla mappa grande
 function initEnergyPoints() {
   // Rimuovi punti energia esistenti
@@ -3429,7 +3473,7 @@ function initEnergyPoints() {
     });
   }
   
-  gameState.energyPoints = [];
+  gameState.energyPoints = new Map();
   
   // Numero di punti proporzionale alla dimensione della mappa
   const pointsCount = Math.floor(WORLD_CONFIG.width * WORLD_CONFIG.height / 20000);
@@ -3440,7 +3484,7 @@ function initEnergyPoints() {
     const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
     
     const energyPoint = createEnergyPoint(x, y);
-    gameState.energyPoints.push(energyPoint);
+    gameState.energyPoints.set(i, energyPoint);
   }
   
   console.log(`Creati ${pointsCount} punti energia sulla mappa`);
@@ -3506,7 +3550,7 @@ function createPlayerSprite(id, isLocal, size = INITIAL_SIZE) {
   }
   
   // Aggiungi il nome del giocatore
-  const nameText = new PIXI.Text(isLocal ? 'Tu' : `Giocatore ${id.substring(0, 4)}`, {
+  const nameText = new PIXI.Text(isLocal ? 'Tu' : `Giocatore ${id ? id.substring(0, 4) : 'Sconosciuto'}`, {
     fontFamily: 'Arial',
     fontSize: 14,
     fill: 0xffffff,
@@ -3607,73 +3651,7 @@ function initGame() {
   });
   
   // Includi la funzione updateEnergyPoints dal file separato
-  // Funzione per aggiornare i punti energia sulla mappa
-  function updateEnergyPoints(delta) {
-    if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
-    
-    const localPlayer = gameState.players.get(gameState.playerId);
-    if (!localPlayer) return;
-    
-    // Controlla collisioni con i punti energia
-    gameState.energyPoints.forEach((point, index) => {
-      // Salta punti già raccolti
-      if (!point.visible) return;
-      
-      // Calcola distanza tra giocatore e punto energia
-      const dx = localPlayer.x - point.x;
-      const dy = localPlayer.y - point.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Se il giocatore tocca il punto energia
-      if (distance < localPlayer.size + 10) {
-        // Nascondi il punto energia
-        point.visible = false;
-        
-        // Aumenta la dimensione del giocatore
-        const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
-        localPlayer.size = newSize;
-        
-        // Aggiorna la grafica del giocatore
-        if (localPlayer.sprite) {
-          localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
-        }
-        
-        // Crea effetto particellare se abilitato
-        if (gameState.useAdvancedEffects) {
-          createParticleEffect(point.x, point.y, 0x00ff88, 20);
-        }
-        
-        // Invia aggiornamento al server
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          const message = {
-            type: 'collectEnergy',
-            id: gameState.playerId,
-            size: newSize,
-            pointIndex: index
-          };
-          socket.send(msgpack.encode(message));
-        }
-        
-        // Controlla se il giocatore ha raggiunto un nuovo livello
-        checkLevelUp(newSize);
-        
-        // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
-        setTimeout(() => {
-          if (!gameState.energyPoints.has(index)) return;
-          
-          // Nuova posizione casuale
-          const padding = 100;
-          const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
-          const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
-          
-          point.x = x;
-          point.y = y;
-          point.visible = true;
-        }, 10000); // 10 secondi
-      }
-    });
-  }
-  
+  // Includi la funzione updateEnergyPoints dal file separato
   console.log("Gioco inizializzato con successo");
 }
 
@@ -3729,7 +3707,7 @@ function updateEnergyPoints(delta) {
       
       // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
       setTimeout(() => {
-        if (!gameState.energyPoints[index]) return;
+        if (!gameState.energyPoints || typeof gameState.energyPoints.has !== 'function' || !gameState.energyPoints.has(index)) return;
         
         // Nuova posizione casuale
         const padding = 100;
@@ -3769,7 +3747,7 @@ function checkLevelUp(newSize) {
     if (levelInfo.ability) {
       showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
     }
-  }
+  });
 }
 
 // Funzione per ottenere il nome dell'abilità
@@ -3829,7 +3807,7 @@ function createParticleEffect(x, y, color, count) {
         app.ticker.remove(arguments.callee);
       }
     });
-  }
+  });
 }
 
 // Funzione per aggiornare la camera
@@ -4059,7 +4037,7 @@ class MovementPredictor {
     
     // Se la differenza è accettabile, mantieni lo stato corrente
     return this.current;
-  }
+  });
 }
 
 // Aggiungi il predictor al gameState
@@ -4111,7 +4089,7 @@ function handleDeviceOrientation() {
         // Aggiungi listener per il cambio di orientamento
         window.addEventListener('resize', checkOrientation);
         window.addEventListener('orientationchange', checkOrientation);
-    }
+    });
 }
 
         // Verifica le dimensioni e orientamento per dispositivi mobili
@@ -4534,7 +4512,7 @@ function activateAbility(index) {
           break;
       }
     }
-  }
+  });
 }
 
 // Crea pulsanti abilità per dispositivi mobili
@@ -4640,5 +4618,5 @@ function setupAbilityControls() {
     
     // Aggiungi al game container
     document.getElementById('game-container').appendChild(abilitiesUI);
-  }
+  });
 }
