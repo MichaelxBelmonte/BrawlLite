@@ -461,6 +461,35 @@ const gameState = {
     camera: new DynamicCamera()
 };
 
+// Inizializza il contatore FPS
+function initFpsCounter() {
+  // Crea un nuovo testo per il contatore FPS
+  const fpsCounter = new PIXI.Text('FPS: 0', {
+    fontFamily: 'Arial',
+    fontSize: 14,
+    fill: 0x00ff00,
+    fontWeight: 'bold',
+    stroke: 0x000000,
+    strokeThickness: 4,
+    dropShadow: true,
+    dropShadowColor: 0x000000,
+    dropShadowBlur: 4,
+    dropShadowAngle: Math.PI / 6,
+    dropShadowDistance: 2
+  });
+  
+  // Imposta la posizione e visibilità
+  fpsCounter.x = 10;
+  fpsCounter.y = 10;
+  fpsCounter.alpha = 0.8;
+  fpsCounter.zIndex = 1000;
+  
+  // Aggiungi al gameState
+  gameState.fpsCounter = fpsCounter;
+  
+  return fpsCounter;
+}
+
 // Sistema per aggiornare il contatore FPS e monitorare prestazioni
 function updateFpsCounter(fps) {
   if (!gameState.fpsCounter) return;
