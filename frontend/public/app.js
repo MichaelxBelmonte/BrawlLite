@@ -597,7 +597,286 @@ function initGame() {
     updateMinimap();
   });
   
+  // Includi la funzione updateEnergyPoints dal file separato
+  // Funzione per aggiornare i punti energia sulla mappa
+  function updateEnergyPoints(delta) {
+    if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
+    
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (!localPlayer) return;
+    
+    // Controlla collisioni con i punti energia
+    gameState.energyPoints.forEach((point, index) => {
+      // Salta punti già raccolti
+      if (!point.visible) return;
+      
+      // Calcola distanza tra giocatore e punto energia
+      const dx = localPlayer.x - point.x;
+      const dy = localPlayer.y - point.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Se il giocatore tocca il punto energia
+      if (distance < localPlayer.size + 10) {
+        // Nascondi il punto energia
+        point.visible = false;
+        
+        // Aumenta la dimensione del giocatore
+        const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
+        localPlayer.size = newSize;
+        
+        // Aggiorna la grafica del giocatore
+        if (localPlayer.sprite) {
+          localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
+        }
+        
+        // Crea effetto particellare se abilitato
+        if (gameState.useAdvancedEffects) {
+          createParticleEffect(point.x, point.y, 0x00ff88, 20);
+        }
+        
+        // Invia aggiornamento al server
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          const message = {
+            type: 'collectEnergy',
+            id: gameState.playerId,
+            size: newSize,
+            pointIndex: index
+          };
+          socket.send(msgpack.encode(message));
+        }
+        
+        // Controlla se il giocatore ha raggiunto un nuovo livello
+        checkLevelUp(newSize);
+        
+        // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
+        setTimeout(() => {
+          if (!gameState.energyPoints.has(index)) return;
+          
+          // Nuova posizione casuale
+          const padding = 100;
+          const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+          const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+          
+          point.x = x;
+          point.y = y;
+          point.visible = true;
+        }, 10000); // 10 secondi
+      }
+    });
+  }
+  
   console.log("Gioco inizializzato con successo");
+}
+
+// Funzione per aggiornare i punti energia sulla mappa
+function updateEnergyPoints(delta) {
+  if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
+  
+  const localPlayer = gameState.players.get(gameState.playerId);
+  if (!localPlayer) return;
+  
+  // Controlla collisioni con i punti energia
+  gameState.energyPoints.forEach((point, index) => {
+    // Salta punti già raccolti
+    if (!point.visible) return;
+    
+    // Calcola distanza tra giocatore e punto energia
+    const dx = localPlayer.x - point.x;
+    const dy = localPlayer.y - point.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Se il giocatore tocca il punto energia
+    if (distance < localPlayer.size + 10) {
+      // Nascondi il punto energia
+      point.visible = false;
+      
+      // Aumenta la dimensione del giocatore
+      const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
+      localPlayer.size = newSize;
+      
+      // Aggiorna la grafica del giocatore
+      if (localPlayer.sprite) {
+        localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
+      }
+      
+      // Crea effetto particellare se abilitato
+      if (gameState.useAdvancedEffects) {
+        createParticleEffect(point.x, point.y, 0x00ff88, 20);
+      }
+      
+      // Invia aggiornamento al server
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message = {
+          type: 'collectEnergy',
+          id: gameState.playerId,
+          size: newSize,
+          pointIndex: index
+        };
+        socket.send(msgpack.encode(message));
+      }
+      
+      // Controlla se il giocatore ha raggiunto un nuovo livello
+      checkLevelUp(newSize);
+      
+      // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
+      setTimeout(() => {
+        if (!gameState.energyPoints[index]) return;
+        
+        // Nuova posizione casuale
+        const padding = 100;
+        const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+        const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+        
+        point.x = x;
+        point.y = y;
+        point.visible = true;
+      }, 10000); // 10 secondi
+    }
+  });
+}
+
+// Funzione per controllare se il giocatore ha raggiunto un nuovo livello
+function checkLevelUp(newSize) {
+  // Trova il livello corrispondente alla nuova dimensione
+  let newLevel = 1;
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (newSize >= LEVEL_THRESHOLDS[i].size) {
+      newLevel = LEVEL_THRESHOLDS[i].level;
+      break;
+    }
+  }
+  
+  // Se il livello è cambiato
+  if (newLevel > gameState.level) {
+    gameState.level = newLevel;
+    
+    // Trova il nome del livello
+    const levelInfo = LEVEL_THRESHOLDS.find(t => t.level === newLevel);
+    
+    // Mostra messaggio di avanzamento
+    showMessage(`Hai raggiunto il livello ${newLevel}: ${levelInfo.name}!`, 'success');
+    
+    // Se il livello ha un'abilità, mostra un messaggio
+    if (levelInfo.ability) {
+      showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
+    }
+  }
+}
+
+// Funzione per ottenere il nome dell'abilità
+function getAbilityName(abilityKey) {
+  const abilityNames = {
+    'speed': 'Velocità',
+    'shield': 'Scudo',
+    'attack': 'Attacco'
+  };
+  
+  return abilityNames[abilityKey] || abilityKey;
+}
+
+// Funzione per creare un effetto particellare
+function createParticleEffect(x, y, color, count) {
+  if (!gameState.useAdvancedEffects) return;
+  
+  const particleCount = Math.min(count, gameState.maxParticles / 10);
+  
+  for (let i = 0; i < particleCount; i++) {
+    const particle = new PIXI.Graphics();
+    particle.beginFill(color, 0.8);
+    particle.drawCircle(0, 0, 2 + Math.random() * 3);
+    particle.endFill();
+    particle.x = x;
+    particle.y = y;
+    
+    // Velocità e direzione casuale
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3;
+    particle.vx = Math.cos(angle) * speed;
+    particle.vy = Math.sin(angle) * speed;
+    
+    // Durata di vita
+    particle.life = 30 + Math.random() * 30;
+    
+    // Aggiungi alla scena
+    gameState.camera.addToWorld(particle);
+    
+    // Animazione
+    gsap.to(particle, {
+      alpha: 0,
+      duration: particle.life / 60,
+      onComplete: () => {
+        if (particle.parent) particle.parent.removeChild(particle);
+      }
+    });
+    
+    // Aggiorna la posizione della particella ad ogni frame
+    app.ticker.add(() => {
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      particle.life--;
+      
+      if (particle.life <= 0 && particle.parent) {
+        particle.parent.removeChild(particle);
+        app.ticker.remove(arguments.callee);
+      }
+    });
+  }
+}
+
+// Funzione per aggiornare la camera
+  
+  console.log("Gioco inizializzato con successo");
+// Create visual effect for energy collection
+function createCollectEffect(x, y) {
+    // Create particles
+    for (let i = 0; i < 10; i++) {
+        const particle = new PIXI.Graphics();
+        particle.beginFill(0x00ff88, 0.8);
+        particle.drawCircle(0, 0, Math.random() * 4 + 2);
+        particle.endFill();
+        particle.x = x;
+        particle.y = y;
+        
+        // Add to stage
+        app.stage.addChild(particle);
+        
+        // Random direction
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 50 + 20;
+        const duration = Math.random() * 0.5 + 0.3;
+        
+        // Animate
+        gsap.to(particle, {
+            x: x + Math.cos(angle) * distance,
+            y: y + Math.sin(angle) * distance,
+            alpha: 0,
+            duration: duration,
+            ease: "power2.out",
+            onComplete: () => {
+                app.stage.removeChild(particle);
+            }
+        });
+    }
+    
+    // Create flash effect
+    const flash = new PIXI.Graphics();
+    flash.beginFill(0x00ff88, 0.4);
+    flash.drawCircle(0, 0, 20);
+    flash.endFill();
+    flash.x = x;
+    flash.y = y;
+    app.stage.addChild(flash);
+    
+    // Animate flash
+    gsap.to(flash, {
+        alpha: 0,
+        pixi: { scale: 3 },
+        duration: 0.4,
+        ease: "power2.out",
+        onComplete: () => {
+            app.stage.removeChild(flash);
+        }
+    });
 }
 
 // Funzione per inizializzare PixiJS
@@ -3198,13 +3477,55 @@ function createEnergyPoint(x, y) {
   return energyPoint;
 }
 
-// Modifica la funzione createPlayerSprite per adattarsi alla camera
+// Funzione per creare lo sprite di un giocatore
 function createPlayerSprite(id, isLocal, size = INITIAL_SIZE) {
-  // ... il codice esistente ...
+  // Crea un container per il giocatore
+  const container = new PIXI.Container();
+  container.id = id;
+  container.isLocal = isLocal;
+  container.size = size;
   
-  // Al posto di app.stage.addChild(container)
-  if (container && gameState.camera) {
+  // Posizione iniziale casuale
+  container.x = Math.random() * (WORLD_CONFIG.width - 200) + 100;
+  container.y = Math.random() * (WORLD_CONFIG.height - 200) + 100;
+  
+  // Crea lo sprite del giocatore
+  const sprite = new PIXI.Graphics();
+  sprite.beginFill(isLocal ? 0x00ff88 : 0x3498db);
+  sprite.drawCircle(0, 0, size);
+  sprite.endFill();
+  container.addChild(sprite);
+  container.sprite = sprite;
+  
+  // Aggiungi un bordo per il giocatore locale
+  if (isLocal) {
+    const border = new PIXI.Graphics();
+    border.lineStyle(2, 0xffffff, 0.8);
+    border.drawCircle(0, 0, size + 2);
+    container.addChild(border);
+  }
+  
+  // Aggiungi il nome del giocatore
+  const nameText = new PIXI.Text(isLocal ? 'Tu' : `Giocatore ${id.substring(0, 4)}`, {
+    fontFamily: 'Arial',
+    fontSize: 14,
+    fill: 0xffffff,
+    align: 'center',
+    stroke: 0x000000,
+    strokeThickness: 4
+  });
+  nameText.anchor.set(0.5);
+  nameText.y = -size - 15;
+  container.addChild(nameText);
+  
+  // Aggiungi al mondo di gioco usando la camera
+  if (gameState.camera) {
     gameState.camera.addToWorld(container);
+  } else {
+    console.error("Camera non inizializzata, impossibile aggiungere il giocatore");
+    if (app && app.stage) {
+      app.stage.addChild(container);
+    }
   }
   
   return container;
@@ -3285,8 +3606,239 @@ function initGame() {
     updateMinimap();
   });
   
+  // Includi la funzione updateEnergyPoints dal file separato
+  // Funzione per aggiornare i punti energia sulla mappa
+  function updateEnergyPoints(delta) {
+    if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
+    
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (!localPlayer) return;
+    
+    // Controlla collisioni con i punti energia
+    gameState.energyPoints.forEach((point, index) => {
+      // Salta punti già raccolti
+      if (!point.visible) return;
+      
+      // Calcola distanza tra giocatore e punto energia
+      const dx = localPlayer.x - point.x;
+      const dy = localPlayer.y - point.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Se il giocatore tocca il punto energia
+      if (distance < localPlayer.size + 10) {
+        // Nascondi il punto energia
+        point.visible = false;
+        
+        // Aumenta la dimensione del giocatore
+        const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
+        localPlayer.size = newSize;
+        
+        // Aggiorna la grafica del giocatore
+        if (localPlayer.sprite) {
+          localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
+        }
+        
+        // Crea effetto particellare se abilitato
+        if (gameState.useAdvancedEffects) {
+          createParticleEffect(point.x, point.y, 0x00ff88, 20);
+        }
+        
+        // Invia aggiornamento al server
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          const message = {
+            type: 'collectEnergy',
+            id: gameState.playerId,
+            size: newSize,
+            pointIndex: index
+          };
+          socket.send(msgpack.encode(message));
+        }
+        
+        // Controlla se il giocatore ha raggiunto un nuovo livello
+        checkLevelUp(newSize);
+        
+        // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
+        setTimeout(() => {
+          if (!gameState.energyPoints.has(index)) return;
+          
+          // Nuova posizione casuale
+          const padding = 100;
+          const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+          const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+          
+          point.x = x;
+          point.y = y;
+          point.visible = true;
+        }, 10000); // 10 secondi
+      }
+    });
+  }
+  
   console.log("Gioco inizializzato con successo");
 }
+
+// Funzione per aggiornare i punti energia sulla mappa
+function updateEnergyPoints(delta) {
+  if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
+  
+  const localPlayer = gameState.players.get(gameState.playerId);
+  if (!localPlayer) return;
+  
+  // Controlla collisioni con i punti energia
+  gameState.energyPoints.forEach((point, index) => {
+    // Salta punti già raccolti
+    if (!point.visible) return;
+    
+    // Calcola distanza tra giocatore e punto energia
+    const dx = localPlayer.x - point.x;
+    const dy = localPlayer.y - point.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Se il giocatore tocca il punto energia
+    if (distance < localPlayer.size + 10) {
+      // Nascondi il punto energia
+      point.visible = false;
+      
+      // Aumenta la dimensione del giocatore
+      const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
+      localPlayer.size = newSize;
+      
+      // Aggiorna la grafica del giocatore
+      if (localPlayer.sprite) {
+        localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
+      }
+      
+      // Crea effetto particellare se abilitato
+      if (gameState.useAdvancedEffects) {
+        createParticleEffect(point.x, point.y, 0x00ff88, 20);
+      }
+      
+      // Invia aggiornamento al server
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message = {
+          type: 'collectEnergy',
+          id: gameState.playerId,
+          size: newSize,
+          pointIndex: index
+        };
+        socket.send(msgpack.encode(message));
+      }
+      
+      // Controlla se il giocatore ha raggiunto un nuovo livello
+      checkLevelUp(newSize);
+      
+      // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
+      setTimeout(() => {
+        if (!gameState.energyPoints[index]) return;
+        
+        // Nuova posizione casuale
+        const padding = 100;
+        const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+        const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+        
+        point.x = x;
+        point.y = y;
+        point.visible = true;
+      }, 10000); // 10 secondi
+    }
+  });
+}
+
+// Funzione per controllare se il giocatore ha raggiunto un nuovo livello
+function checkLevelUp(newSize) {
+  // Trova il livello corrispondente alla nuova dimensione
+  let newLevel = 1;
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (newSize >= LEVEL_THRESHOLDS[i].size) {
+      newLevel = LEVEL_THRESHOLDS[i].level;
+      break;
+    }
+  }
+  
+  // Se il livello è cambiato
+  if (newLevel > gameState.level) {
+    gameState.level = newLevel;
+    
+    // Trova il nome del livello
+    const levelInfo = LEVEL_THRESHOLDS.find(t => t.level === newLevel);
+    
+    // Mostra messaggio di avanzamento
+    showMessage(`Hai raggiunto il livello ${newLevel}: ${levelInfo.name}!`, 'success');
+    
+    // Se il livello ha un'abilità, mostra un messaggio
+    if (levelInfo.ability) {
+      showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
+    }
+  }
+}
+
+// Funzione per ottenere il nome dell'abilità
+function getAbilityName(abilityKey) {
+  const abilityNames = {
+    'speed': 'Velocità',
+    'shield': 'Scudo',
+    'attack': 'Attacco'
+  };
+  
+  return abilityNames[abilityKey] || abilityKey;
+}
+
+// Funzione per creare un effetto particellare
+function createParticleEffect(x, y, color, count) {
+  if (!gameState.useAdvancedEffects) return;
+  
+  const particleCount = Math.min(count, gameState.maxParticles / 10);
+  
+  for (let i = 0; i < particleCount; i++) {
+    const particle = new PIXI.Graphics();
+    particle.beginFill(color, 0.8);
+    particle.drawCircle(0, 0, 2 + Math.random() * 3);
+    particle.endFill();
+    particle.x = x;
+    particle.y = y;
+    
+    // Velocità e direzione casuale
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3;
+    particle.vx = Math.cos(angle) * speed;
+    particle.vy = Math.sin(angle) * speed;
+    
+    // Durata di vita
+    particle.life = 30 + Math.random() * 30;
+    
+    // Aggiungi alla scena
+    gameState.camera.addToWorld(particle);
+    
+    // Animazione
+    gsap.to(particle, {
+      alpha: 0,
+      duration: particle.life / 60,
+      onComplete: () => {
+        if (particle.parent) particle.parent.removeChild(particle);
+      }
+    });
+    
+    // Aggiorna la posizione della particella ad ogni frame
+    app.ticker.add(() => {
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      particle.life--;
+      
+      if (particle.life <= 0 && particle.parent) {
+        particle.parent.removeChild(particle);
+        app.ticker.remove(arguments.callee);
+      }
+    });
+  }
+}
+
+// Funzione per aggiornare la camera
+  
+  console.log("Gioco inizializzato con successo");
+// Initialize game when document is ready
+document.addEventListener('DOMContentLoaded', () => {
+    initGame();
+});
 
 // Funzione per aggiornare la camera
 function updateCamera(delta) {
