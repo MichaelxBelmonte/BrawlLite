@@ -3483,3 +3483,55 @@ class MovementPredictor {
 
 // Aggiungi il predictor al gameState
 gameState.movementPredictor = new MovementPredictor();
+
+// Verifica e gestisce l'orientamento del dispositivo mobile
+function handleDeviceOrientation() {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        // Verifica dimensioni e orientamento
+        const checkOrientation = () => {
+            const isLandscape = window.innerWidth > window.innerHeight;
+            let orientationMessage = document.getElementById('orientation-message');
+            
+            if (!orientationMessage) {
+                const message = document.createElement('div');
+                message.id = 'orientation-message';
+                message.style.position = 'fixed';
+                message.style.top = '0';
+                message.style.left = '0';
+                message.style.width = '100%';
+                message.style.height = '100%';
+                message.style.backgroundColor = 'rgba(0,0,0,0.8)';
+                message.style.color = 'white';
+                message.style.display = 'flex';
+                message.style.alignItems = 'center';
+                message.style.justifyContent = 'center';
+                message.style.zIndex = '1000';
+                message.style.textAlign = 'center';
+                message.style.fontSize = '1.2rem';
+                message.style.padding = '20px';
+                message.style.boxSizing = 'border-box';
+                document.body.appendChild(message);
+                orientationMessage = message;
+            }
+            
+            if (!isLandscape) {
+                orientationMessage.innerHTML = 'Per una migliore esperienza di gioco,<br>ruota il dispositivo in modalità orizzontale.';
+                orientationMessage.style.display = 'flex';
+            } else {
+                orientationMessage.style.display = 'none';
+            }
+        };
+        
+        // Controlla all'avvio
+        checkOrientation();
+        
+        // Aggiungi listener per il cambio di orientamento
+        window.addEventListener('resize', checkOrientation);
+        window.addEventListener('orientationchange', checkOrientation);
+    }
+}
+
+        // Verifica le dimensioni e orientamento per dispositivi mobili
+        handleDeviceOrientation();
