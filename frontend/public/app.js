@@ -3601,3 +3601,359 @@ function setupResizeHandler() {
     }
   });
 }
+
+// Configura i controlli (tastiera o touch)
+function setupControls() {
+  // Reset stato dei tasti
+  gameState.keys = {
+    w: false,
+    a: false,
+    s: false,
+    d: false
+  };
+  
+  // Verifica se è un dispositivo mobile
+  const isMobile = isMobileDevice();
+  
+  if (isMobile) {
+    // Setup controlli touch per mobile
+    setupMobileControls();
+  } else {
+    // Setup keyboard controls per desktop
+    setupKeyboardControls();
+  }
+  
+  // Aggiungi handler abilità
+  setupAbilityControls();
+  
+  console.log(`Controlli inizializzati per ${isMobile ? 'dispositivi mobili' : 'desktop'}`);
+}
+
+// Configura controlli da tastiera
+function setupKeyboardControls() {
+  // Aggiungi event listener per keydown
+  window.addEventListener('keydown', (e) => {
+    // Previeni il comportamento predefinito solo per i tasti di movimento
+    if (['w', 'a', 's', 'd', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+    }
+    
+    switch (e.key.toLowerCase()) {
+      case 'w':
+      case 'arrowup':
+        gameState.keys.w = true;
+        break;
+      case 'a':
+      case 'arrowleft':
+        gameState.keys.a = true;
+        break;
+      case 's':
+      case 'arrowdown':
+        gameState.keys.s = true;
+        break;
+      case 'd':
+      case 'arrowright':
+        gameState.keys.d = true;
+        break;
+      case '1':
+        // Attiva velocità
+        if (gameState.abilities && gameState.abilities.cooldowns.speed <= 0) {
+          activateAbility('speed');
+        }
+        break;
+      case '2':
+        // Attiva scudo
+        if (gameState.abilities && gameState.abilities.cooldowns.shield <= 0) {
+          activateAbility('shield');
+        }
+        break;
+      case '3':
+        // Attiva attacco
+        if (gameState.abilities && gameState.abilities.cooldowns.attack <= 0) {
+          activateAbility('attack');
+        }
+        break;
+    }
+  });
+  
+  // Aggiungi event listener per keyup
+  window.addEventListener('keyup', (e) => {
+    switch (e.key.toLowerCase()) {
+      case 'w':
+      case 'arrowup':
+        gameState.keys.w = false;
+        break;
+      case 'a':
+      case 'arrowleft':
+        gameState.keys.a = false;
+        break;
+      case 's':
+      case 'arrowdown':
+        gameState.keys.s = false;
+        break;
+      case 'd':
+      case 'arrowright':
+        gameState.keys.d = false;
+        break;
+    }
+  });
+}
+
+// Configura controlli per dispositivi mobili
+function setupMobileControls() {
+  // Crea un container per i controlli mobili
+  const mobileControls = document.createElement('div');
+  mobileControls.id = 'mobile-controls';
+  mobileControls.style.position = 'absolute';
+  mobileControls.style.bottom = '10px';
+  mobileControls.style.left = '10px';
+  mobileControls.style.zIndex = '1000';
+  mobileControls.style.opacity = MOBILE_CONFIG.controlsOpacity.toString();
+  mobileControls.style.transition = 'opacity 0.3s ease';
+  
+  // Aggiungi al DOM
+  document.getElementById('game-container').appendChild(mobileControls);
+  
+  // Crea joystick
+  createJoystick(mobileControls);
+  
+  // Crea pulsanti abilità
+  createAbilityButtons(mobileControls);
+  
+  // Gestisci opacità dei controlli quando inattivi
+  let controlsTimeout;
+  const resetControlsTimeout = () => {
+    clearTimeout(controlsTimeout);
+    mobileControls.style.opacity = MOBILE_CONFIG.controlsOpacity.toString();
+    controlsTimeout = setTimeout(() => {
+      mobileControls.style.opacity = '0.2';
+    }, MOBILE_CONFIG.inactivityTimeout);
+  };
+  
+  // Reimposta opacità quando il joystick viene toccato
+  mobileControls.addEventListener('touchstart', resetControlsTimeout);
+  
+  // Imposta l'opacità iniziale
+  resetControlsTimeout();
+}
+
+// Crea joystick virtuale per controlli mobili
+function createJoystick(container) {
+  // Crea elemento joystick
+  const joystick = document.createElement('div');
+  joystick.id = 'joystick';
+  joystick.style.width = `${MOBILE_CONFIG.joystickSize}px`;
+  joystick.style.height = `${MOBILE_CONFIG.joystickSize}px`;
+  joystick.style.borderRadius = '50%';
+  joystick.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+  joystick.style.position = 'relative';
+  joystick.style.border = '2px solid rgba(255, 255, 255, 0.5)';
+  joystick.style.boxSizing = 'border-box';
+  
+  // Crea stick
+  const stick = document.createElement('div');
+  stick.id = 'stick';
+  stick.style.width = `${MOBILE_CONFIG.joystickSize / 2}px`;
+  stick.style.height = `${MOBILE_CONFIG.joystickSize / 2}px`;
+  stick.style.borderRadius = '50%';
+  stick.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+  stick.style.position = 'absolute';
+  stick.style.top = '50%';
+  stick.style.left = '50%';
+  stick.style.transform = 'translate(-50%, -50%)';
+  stick.style.transition = 'transform 0.1s ease-out';
+  
+  // Aggiungi stick al joystick
+  joystick.appendChild(stick);
+  
+  // Aggiungi joystick al container
+  container.appendChild(joystick);
+  
+  // Variabili per il joystick
+  let isDragging = false;
+  const centerX = MOBILE_CONFIG.joystickSize / 2;
+  const centerY = MOBILE_CONFIG.joystickSize / 2;
+  let lastX = centerX;
+  let lastY = centerY;
+  
+  // Calcola la posizione del joystick
+  const getJoystickPosition = (e) => {
+    const touch = e.touches[0];
+    const rect = joystick.getBoundingClientRect();
+    
+    // Posizione relativa al centro del joystick
+    let x = touch.clientX - rect.left;
+    let y = touch.clientY - rect.top;
+    
+    // Calcola distanza dal centro
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Limita la distanza al raggio del joystick
+    const maxDistance = MOBILE_CONFIG.joystickSize / 2;
+    if (distance > maxDistance) {
+      x = centerX + (dx / distance) * maxDistance;
+      y = centerY + (dy / distance) * maxDistance;
+    }
+    
+    return { x, y, distance: Math.min(distance, maxDistance) };
+  };
+  
+  // Aggiorna lo stato del joystick e i dati di movimento
+  const updateJoystickState = (x, y, normalizedDistance) => {
+    // Aggiorna posizione stick
+    stick.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 50%))`;
+    
+    // Calcola direzione e intensità
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const angle = Math.atan2(dy, dx);
+    
+    // Aggiorna stato joystick in gameState
+    gameState.joystickData = {
+      up: dy < -10,
+      down: dy > 10,
+      left: dx < -10,
+      right: dx > 10,
+      strength: normalizedDistance // Da 0 a 1
+    };
+  };
+  
+  // Gestione eventi touch
+  joystick.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    isDragging = true;
+    const pos = getJoystickPosition(e);
+    updateJoystickState(pos.x, pos.y, pos.distance / (MOBILE_CONFIG.joystickSize / 2));
+  });
+  
+  joystick.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!isDragging) return;
+    
+    const pos = getJoystickPosition(e);
+    updateJoystickState(pos.x, pos.y, pos.distance / (MOBILE_CONFIG.joystickSize / 2));
+  });
+  
+  const resetJoystick = () => {
+    isDragging = false;
+    stick.style.transform = 'translate(-50%, -50%)';
+    gameState.joystickData = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      strength: 0
+    };
+  };
+  
+  joystick.addEventListener('touchend', resetJoystick);
+  joystick.addEventListener('touchcancel', resetJoystick);
+}
+
+// Crea pulsanti abilità per dispositivi mobili
+function createAbilityButtons(container) {
+  const abilitiesContainer = document.createElement('div');
+  abilitiesContainer.style.position = 'absolute';
+  abilitiesContainer.style.bottom = '10px';
+  abilitiesContainer.style.right = '10px';
+  abilitiesContainer.style.display = 'flex';
+  abilitiesContainer.style.gap = '10px';
+  
+  // Abilità disponibili
+  const abilities = ['speed', 'shield', 'attack'];
+  
+  // Crea un pulsante per ogni abilità
+  abilities.forEach((ability, index) => {
+    const button = document.createElement('div');
+    button.id = `ability-${ability}`;
+    button.className = 'ability-button';
+    button.style.width = `${MOBILE_CONFIG.buttonSize}px`;
+    button.style.height = `${MOBILE_CONFIG.buttonSize}px`;
+    button.style.borderRadius = '50%';
+    button.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+    button.style.border = '2px solid rgba(255, 255, 255, 0.5)';
+    button.style.boxSizing = 'border-box';
+    button.style.display = 'flex';
+    button.style.alignItems = 'center';
+    button.style.justifyContent = 'center';
+    button.style.fontSize = '24px';
+    button.style.color = 'white';
+    button.style.textShadow = '0 0 3px rgba(0,0,0,0.8)';
+    
+    // Aggiungi icona o testo
+    button.innerHTML = index + 1;
+    
+    // Aggiungi al container
+    abilitiesContainer.appendChild(button);
+    
+    // Aggiungi event listeners
+    button.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (gameState.abilities && gameState.abilities.cooldowns[ability] <= 0) {
+        button.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+        activateAbility(ability);
+      }
+    });
+    
+    button.addEventListener('touchend', () => {
+      button.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+    });
+  });
+  
+  // Aggiungi container abilità al game container
+  document.getElementById('game-container').appendChild(abilitiesContainer);
+}
+
+// Configura controlli per abilità con tasti e pulsanti UI
+function setupAbilityControls() {
+  // Crea pulsanti UI per abilità anche su desktop
+  if (!isMobileDevice()) {
+    const abilitiesUI = document.createElement('div');
+    abilitiesUI.style.position = 'absolute';
+    abilitiesUI.style.bottom = '10px';
+    abilitiesUI.style.left = '50%';
+    abilitiesUI.style.transform = 'translateX(-50%)';
+    abilitiesUI.style.display = 'flex';
+    abilitiesUI.style.gap = '10px';
+    
+    // Abilità disponibili
+    const abilities = [
+      { key: 'speed', name: 'Velocità', hotkey: '1' },
+      { key: 'shield', name: 'Scudo', hotkey: '2' },
+      { key: 'attack', name: 'Attacco', hotkey: '3' }
+    ];
+    
+    // Crea un pulsante per ogni abilità
+    abilities.forEach((ability) => {
+      const button = document.createElement('div');
+      button.id = `ability-ui-${ability.key}`;
+      button.className = 'ability-ui-button';
+      button.style.padding = '5px 15px';
+      button.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      button.style.color = 'white';
+      button.style.borderRadius = '5px';
+      button.style.cursor = 'pointer';
+      button.style.fontSize = '14px';
+      button.style.textAlign = 'center';
+      button.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+      
+      // Testo pulsante
+      button.innerHTML = `${ability.name} <span style="opacity:0.7">[${ability.hotkey}]</span>`;
+      
+      // Aggiungi event listeners
+      button.addEventListener('click', () => {
+        if (gameState.abilities && gameState.abilities.cooldowns[ability.key] <= 0) {
+          activateAbility(ability.key);
+        }
+      });
+      
+      // Aggiungi al container
+      abilitiesUI.appendChild(button);
+    });
+    
+    // Aggiungi al game container
+    document.getElementById('game-container').appendChild(abilitiesUI);
+  }
+}
