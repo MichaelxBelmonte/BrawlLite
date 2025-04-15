@@ -200,48 +200,45 @@ class DynamicCamera {
     this.worldContainer.scale.set(this.zoom);
   }
   
-  // Aggiungi un oggetto al mondo (influenzato dalla camera)
-  addToWorld(object) {
-    if (this.worldContainer && object) {
-      this.worldContainer.addChild(object);
+  // Aggiunge un elemento alla scena di gioco
+  addToWorld(element) {
+    if (this.worldContainer) {
+      this.worldContainer.addChild(element);
       return true;
     }
     return false;
   }
   
-  // Aggiungi un oggetto all'UI (non influenzato dalla camera)
-  addToUI(object) {
-    if (this.uiContainer && object) {
-      this.uiContainer.addChild(object);
+  // Aggiunge un elemento all'interfaccia (non influenzato dalla camera)
+  addToUI(element) {
+    if (this.uiContainer) {
+      this.uiContainer.addChild(element);
       return true;
     }
     return false;
   }
   
-  // Converte coordinate mondo in coordinate schermo
-  worldToScreen(worldX, worldY) {
-    return {
-      x: app.renderer.width / 2 + (worldX - this.x) * this.zoom,
-      y: app.renderer.height / 2 + (worldY - this.y) * this.zoom
-    };
+  // Segue un oggetto (es. il giocatore)
+  follow(target) {
+    if (!target) return;
+    
+    this.targetX = target.x;
+    this.targetY = target.y;
   }
   
-  // Converte coordinate schermo in coordinate mondo
-  screenToWorld(screenX, screenY) {
-    return {
-      x: this.x + (screenX - app.renderer.width / 2) / this.zoom,
-      y: this.y + (screenY - app.renderer.height / 2) / this.zoom
-    };
+  // Zoom rapido temporaneo (es. per visione più ampia)
+  zoomOut(factor) {
+    this.targetZoom = Math.max(WORLD_CONFIG.minZoom, this.targetZoom * factor);
   }
-}
-
-// Aggiungi la camera al gameState
-gameState.camera = new DynamicCamera();
-
-// Funzione per ottenere variabili d'ambiente
-function getEnvVar(name, defaultValue) {
-    // Usa direttamente il valore di default senza try/catch per import.meta
-    return defaultValue;
+  
+  // Ripristina lo zoom normale
+  resetZoom() {
+    // Ripristina lo zoom in base al numero di giocatori
+    this.updateZoom(gameState.players ? gameState.players.size : 1, 
+                   gameState.players && gameState.playerId ? 
+                   (gameState.players.get(gameState.playerId)?.size || INITIAL_SIZE) : 
+                   INITIAL_SIZE);
+  }
 }
 
 // Variabili di configurazione
@@ -298,787 +295,114 @@ const gameState = {
         left: false,
         right: false,
         strength: 0
-    }
+    },
+    camera: new DynamicCamera()
 };
 
-// Configurazione mobile
-const MOBILE_CONFIG = {
-  joystickSize: 120,
-  buttonSize: 80,
-  controlsOpacity: 0.6,
-  inactivityTimeout: 3000 // ms prima che i controlli svaniscano quando inattivi
-};
-
-function isMobileDevice() {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-         (window.innerWidth <= 800 && window.innerHeight <= 600);
+// Sistema per aggiornare il contatore FPS e monitorare prestazioni
+function updateFpsCounter(fps) {
+  if (!gameState.fpsCounter) return;
+  
+  // Aggiorna il testo del contatore FPS
+  gameState.fpsCounter.text = `FPS: ${Math.round(fps)}`;
+  
+  // Colora il testo in base alla performance
+  if (fps >= 50) {
+    gameState.fpsCounter.style.fill = 0x00ff00;
+  } else if (fps >= 30) {
+    gameState.fpsCounter.style.fill = 0xffff00;
+  } else {
+    gameState.fpsCounter.style.fill = 0xff0000;
+  }
+  
+  // Monitora le prestazioni per regolare la qualità
+  if (renderQualityManager) {
+    renderQualityManager.monitorPerformance(fps);
+  }
 }
 
-function setupMobileControls() {
-  if (!isMobileDevice()) return false;
+// Modifica la funzione initGame per usare il sistema di qualità
+function initGame() {
+  console.log("Inizializzazione del gioco");
   
-  showMessage("Controlli touch attivati", "info");
+  // Inizializza il gestore qualità prima di tutto
+  const qualityLevel = renderQualityManager.init();
+  console.log(`Inizializzazione del gioco con qualità: ${qualityLevel}`);
   
-  // Creare il joystick container
-  const joystickContainer = document.createElement('div');
-  joystickContainer.id = 'joystick-container';
-  joystickContainer.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    width: ${MOBILE_CONFIG.joystickSize}px;
-    height: ${MOBILE_CONFIG.joystickSize}px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 50%;
-    border: 2px solid rgba(0, 255, 136, 0.3);
-    z-index: 1000;
-    backdrop-filter: blur(2px);
-    opacity: ${MOBILE_CONFIG.controlsOpacity};
-    transition: opacity 0.3s;
-    touch-action: none;
-  `;
-  
-  // Creare il joystick stick
-  const joystickStick = document.createElement('div');
-  joystickStick.id = 'joystick-stick';
-  joystickStick.style.cssText = `
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: ${MOBILE_CONFIG.joystickSize * 0.4}px;
-    height: ${MOBILE_CONFIG.joystickSize * 0.4}px;
-    background: rgba(0, 255, 136, 0.5);
-    border-radius: 50%;
-    border: 2px solid rgba(0, 255, 136, 0.7);
-    transition: background 0.2s;
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-  `;
-  
-  joystickContainer.appendChild(joystickStick);
-  document.body.appendChild(joystickContainer);
-  
-  // Creare i pulsanti delle abilità
-  const buttonContainer = document.createElement('div');
-  buttonContainer.id = 'button-container';
-  buttonContainer.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    z-index: 1000;
-    align-items: flex-end;
-    opacity: ${MOBILE_CONFIG.controlsOpacity};
-    transition: opacity 0.3s;
-  `;
-  
-  // Primo pulsante: abilità
-  const abilityButton = document.createElement('div');
-  abilityButton.id = 'ability-button';
-  abilityButton.style.cssText = `
-    width: ${MOBILE_CONFIG.buttonSize}px;
-    height: ${MOBILE_CONFIG.buttonSize}px;
-    background: rgba(0, 150, 255, 0.3);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid rgba(0, 150, 255, 0.7);
-    font-size: 18px;
-    color: white;
-    font-weight: bold;
-    text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
-    touch-action: none;
-  `;
-  abilityButton.innerText = 'A';
-  
-  // Secondo pulsante: zoom out
-  const zoomButton = document.createElement('div');
-  zoomButton.id = 'zoom-button';
-  zoomButton.style.cssText = `
-    width: ${MOBILE_CONFIG.buttonSize * 0.8}px;
-    height: ${MOBILE_CONFIG.buttonSize * 0.8}px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    font-size: 18px;
-    color: white;
-    touch-action: none;
-  `;
-  zoomButton.innerText = '👁️';
-  
-  buttonContainer.appendChild(abilityButton);
-  buttonContainer.appendChild(zoomButton);
-  document.body.appendChild(buttonContainer);
-  
-  // Variabili per il joystick
-  let joystickActive = false;
-  let joystickMoved = false;
-  let joystickCenterX, joystickCenterY;
-  const maxDistance = MOBILE_CONFIG.joystickSize * 0.4;
-  let inactivityTimer;
-  
-  // Funzione per aggiornare l'opacità dei controlli
-  function resetControlsOpacity() {
-    clearTimeout(inactivityTimer);
-    joystickContainer.style.opacity = MOBILE_CONFIG.controlsOpacity;
-    buttonContainer.style.opacity = MOBILE_CONFIG.controlsOpacity;
+  // Inizializza PixiJS con le impostazioni appropriate
+  const success = initPixiJS();
+  if (!success) {
+    console.error("Fallimento nell'inizializzazione di PixiJS");
+    showMessage("Impossibile inizializzare il gioco. Prova un browser diverso o controlla la console per dettagli.", "error");
     
-    inactivityTimer = setTimeout(() => {
-      if (!joystickActive) {
-        joystickContainer.style.opacity = '0.2';
-        buttonContainer.style.opacity = '0.2';
-      }
-    }, MOBILE_CONFIG.inactivityTimeout);
+    // Torna alla schermata di login dopo un errore
+    setTimeout(() => {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('game-container').style.display = 'none';
+    }, 3000);
+    
+    return;
   }
   
-  // Inizializzazione del joystick
-  function initJoystick() {
-    joystickCenterX = MOBILE_CONFIG.joystickSize / 2;
-    joystickCenterY = MOBILE_CONFIG.joystickSize / 2;
-    
-    // Eventi touch per il joystick
-    joystickContainer.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      joystickActive = true;
-      resetControlsOpacity();
-      updateJoystickPosition(e);
-    });
-    
-    document.addEventListener('touchmove', (e) => {
-      if (joystickActive) {
-        e.preventDefault();
-        updateJoystickPosition(e);
-      }
-    });
-    
-    document.addEventListener('touchend', (e) => {
-      if (joystickActive) {
-        joystickActive = false;
-        joystickMoved = false;
-        resetControlsOpacity();
-        
-        // Ripristina posizione joystick
-        joystickStick.style.transform = 'translate(-50%, -50%)';
-        
-        // Resetta input movimento
-        gameState.input.horizontalInput = 0;
-        gameState.input.verticalInput = 0;
-      }
-    });
-    
-    // Funzione per aggiornare la posizione del joystick
-    function updateJoystickPosition(e) {
-      const touch = e.touches[0];
-      const rect = joystickContainer.getBoundingClientRect();
-      const touchX = touch.clientX - rect.left;
-      const touchY = touch.clientY - rect.top;
-      
-      // Calcola distanza dal centro
-      let dx = touchX - joystickCenterX;
-      let dy = touchY - joystickCenterY;
-      let distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Limita distanza
-      if (distance > maxDistance) {
-        dx = (dx / distance) * maxDistance;
-        dy = (dy / distance) * maxDistance;
-        distance = maxDistance;
-      }
-      
-      // Aggiorna posizione visiva
-      joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-      
-      // Invia input di movimento normalizzato
-      gameState.input.horizontalInput = dx / maxDistance;
-      gameState.input.verticalInput = dy / maxDistance;
-      
-      joystickMoved = true;
-    }
-    
-    // Abilità e zoom
-    abilityButton.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      resetControlsOpacity();
-      abilityButton.style.background = 'rgba(0, 150, 255, 0.7)';
-      abilityButton.style.transform = 'scale(0.9)';
-      
-      // Attiva abilità del giocatore
-      if (gameState.localPlayer) {
-        activateAbility('speed', gameState.localPlayer);
-      }
-    });
-    
-    abilityButton.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      abilityButton.style.background = 'rgba(0, 150, 255, 0.3)';
-      abilityButton.style.transform = 'scale(1)';
-    });
-    
-    zoomButton.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      resetControlsOpacity();
-      zoomButton.style.background = 'rgba(255, 255, 255, 0.4)';
-      zoomButton.style.transform = 'scale(0.9)';
-      
-      // Cambia livello di zoom
-      if (gameState.camera) {
-        gameState.camera.zoomOut(0.7);
-        setTimeout(() => {
-          gameState.camera.resetZoom();
-        }, 2000);
-      }
-    });
-    
-    zoomButton.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      zoomButton.style.background = 'rgba(255, 255, 255, 0.2)';
-      zoomButton.style.transform = 'scale(1)';
-    });
+  // Inizializza la camera prima del resto
+  if (!gameState.camera.init(app)) {
+    console.error("Errore nell'inizializzazione della camera");
+    return;
   }
   
-  // Aggiusta layout in base all'orientamento
-  function adjustLayoutForOrientation() {
-    if (window.innerWidth > window.innerHeight) {
-      // Landscape
-      joystickContainer.style.bottom = '20px';
-      joystickContainer.style.left = '20px';
-      buttonContainer.style.bottom = '20px';
-      buttonContainer.style.right = '20px';
-    } else {
-      // Portrait
-      joystickContainer.style.bottom = '20px';
-      joystickContainer.style.left = '20px';
-      buttonContainer.style.bottom = '20px';
-      buttonContainer.style.right = '20px';
-    }
+  // Inizializza il contatore FPS e aggiungilo all'UI
+  initFpsCounter();
+  if (gameState.fpsCounter && gameState.camera) {
+    gameState.camera.addToUI(gameState.fpsCounter);
   }
   
-  // Gestisci cambiamenti di orientamento
-  window.addEventListener('resize', adjustLayoutForOrientation);
-  window.addEventListener('orientationchange', adjustLayoutForOrientation);
+  // Inizializza sfondo
+  createBackground();
   
-  // Inizializza
-  initJoystick();
-  adjustLayoutForOrientation();
-  resetControlsOpacity();
+  // Inizializza punti energia
+  initEnergyPoints();
   
-  return true;
-}
-
-// Funzione di setup dei controlli (tastiera + mobile)
-function setupControls() {
-  // Inizializza lo stato degli input
-  gameState.keys = {
-    w: false,
-    a: false,
-    s: false,
-    d: false,
-    ArrowUp: false,
-    ArrowDown: false,
-    ArrowLeft: false,
-    ArrowRight: false
-  };
+  // Inizializza minimappa
+  createMinimap();
   
-  // Supporto joystick virtuale
-  gameState.joystickData = {
-    up: false,
-    down: false,
-    left: false,
-    right: false,
-    strength: 0
-  };
+  // Nasconde la schermata di login
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('game-container').style.display = 'block';
   
-  // Controlla se ci sono controlli touch configurati
-  const hasTouchControls = setupMobileControls();
+  // Rileva e configura controlli mobile se necessario
+  setupControls();
   
-  // Aggiungi sempre eventi tastiera per supportare anche dispositivi ibridi
-  window.addEventListener('keydown', (e) => {
-    const key = e.key.toLowerCase();
-    if (key in gameState.keys) {
-      gameState.keys[key] = true;
-    }
+  // Connetti al server
+  connectWebSocket();
+  
+  // Attiva il sistema di recupero automatico
+  setupAutomaticRecovery();
+  
+  // Imposta il loop di gioco principale
+  app.ticker.add(delta => {
+    if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
     
-    // Scorciatoie rapide per abilità
-    if (e.key === '1' || e.key === ' ') {
-      activateAbility();
-    }
+    // Aggiorna movimento
+    updateMovement(delta);
+    
+    // Aggiorna camera
+    updateCamera(delta);
+    
+    // Interpolazione altri giocatori
+    interpolateOtherPlayers(delta);
+    
+    // Aggiorna punti energia
+    updateEnergyPoints(delta);
+    
+    // Aggiorna contatore FPS
+    updateFpsCounter(app.ticker.FPS);
+    
+    // Aggiorna minimappa
+    updateMinimap();
   });
   
-  window.addEventListener('keyup', (e) => {
-    const key = e.key.toLowerCase();
-    if (key in gameState.keys) {
-      gameState.keys[key] = false;
-    }
-  });
-  
-  // Aggiungi listener per pause quando l'utente cambia tab
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      // Reset dello stato input quando la pagina non è visibile
-      for (let key in gameState.keys) {
-        gameState.keys[key] = false;
-      }
-      
-      // Reset joystick data
-      gameState.joystickData = {
-        up: false,
-        down: false,
-        left: false,
-        right: false,
-        strength: 0
-      };
-    }
-  });
-  
-  console.log(`Controlli configurati: ${hasTouchControls ? 'touch + tastiera' : 'solo tastiera'}`);
+  console.log("Gioco inizializzato con successo");
 }
-
-// Inizializza gameState.joystickData
-gameState.joystickData = {
-  up: false,
-  down: false,
-  left: false,
-  right: false,
-  strength: 0
-};
-
-// Validazione del movimento lato client
-function validateMovement(x, y, prevX, prevY) {
-  // Calcola distanza
-  const dx = x - prevX;
-  const dy = y - prevY;
-  const distance = Math.sqrt(dx*dx + dy*dy);
-  
-  // Velocità massima consentita (pixel per frame)
-  const maxSpeed = 15;
-  
-  // Se il movimento è troppo grande, limita la distanza
-  if (distance > maxSpeed) {
-    const ratio = maxSpeed / distance;
-    return {
-      x: prevX + dx * ratio,
-      y: prevY + dy * ratio,
-      limited: true
-    };
-  }
-  
-  return { x, y, limited: false };
-}
-
-// Predizione stato client
-function predictClientState(player, inputs) {
-  if (!player) return null;
-  
-  const newState = {
-    x: player.x,
-    y: player.y,
-    size: player.size,
-    score: player.score
-  };
-  
-  // Calcola velocità in base alla dimensione (più grande = più lento)
-  const speedFactor = Math.max(0.5, 1 - (player.size / 500));
-  const baseSpeed = PLAYER_SPEED * speedFactor;
-  
-  // Movimento da tastiera
-  if (inputs.keys.w || inputs.joystickData.up) {
-    newState.y -= baseSpeed * (inputs.joystickData.strength || 1);
-  }
-  if (inputs.keys.s || inputs.joystickData.down) {
-    newState.y += baseSpeed * (inputs.joystickData.strength || 1);
-  }
-  if (inputs.keys.a || inputs.joystickData.left) {
-    newState.x -= baseSpeed * (inputs.joystickData.strength || 1);
-  }
-  if (inputs.keys.d || inputs.joystickData.right) {
-    newState.x += baseSpeed * (inputs.joystickData.strength || 1);
-  }
-  
-  // Valida il movimento
-  const validatedMovement = validateMovement(newState.x, newState.y, player.x, player.y);
-  newState.x = validatedMovement.x;
-  newState.y = validatedMovement.y;
-  
-  return newState;
-}
-
-// Interpolazione più fluida per gli altri giocatori
-function interpolateOtherPlayers(delta) {
-  gameState.players.forEach((player, id) => {
-    if (id !== gameState.playerId) {
-      // Calcola fattore di smooth (più pesante = più lento)
-      const sizeFactor = Math.max(0.5, 1 - (player.size / 500));
-      
-      // Interpolazione senza scatti
-      const LERP_FACTOR = 0.2 * sizeFactor;
-      
-      if (player.targetX !== undefined && player.targetY !== undefined) {
-        player.x += (player.targetX - player.x) * LERP_FACTOR * delta;
-        player.y += (player.targetY - player.y) * LERP_FACTOR * delta;
-      }
-    }
-  });
-}
-
-// Modifica la funzione di connessione WebSocket per usare le nuove ottimizzazioni
-function connectWebSocket() {
-  const wsUrl = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
-  
-  console.log(`Tentativo di connessione a: ${wsUrl}`);
-  
-  socket = new WebSocket(wsUrl);
-  
-  // Gestione degli eventi socket
-  socket.onopen = function() {
-    console.log('WebSocket connesso');
-    
-    // Resetta contatore tentativi di connessione
-    gameState.connectionAttempts = 0;
-    
-    // Inizializza ping periodico
-    if (gameState.pingInterval) {
-      clearInterval(gameState.pingInterval);
-    }
-    
-    gameState.pingInterval = setInterval(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        sendToServer({
-          type: 'ping',
-          id: gameState.playerId,
-          timestamp: Date.now()
-        });
-      }
-    }, 30000); // Ping ogni 30 secondi
-    
-    // Invia messaggio join
-    const player = gameState.players.get(gameState.playerId);
-    
-    if (player) {
-      sendToServer({
-        type: 'join',
-        id: gameState.playerId,
-        name: player.children && player.children[2] ? player.children[2].text : 'Player',
-        x: player.x,
-        y: player.y,
-        size: player.size || INITIAL_SIZE,
-        timestamp: Date.now()
-      });
-    }
-  };
-  
-  socket.onclose = function(event) {
-    console.log('WebSocket disconnesso', event.code, event.reason);
-    
-    // Ferma il ping interval
-    if (gameState.pingInterval) {
-      clearInterval(gameState.pingInterval);
-      gameState.pingInterval = null;
-    }
-    
-    // Attiva la modalità offline in dev o tenta di riconnettere
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      console.log('Ambiente locale rilevato, attivazione modalità offline');
-      enableOfflineMode();
-    } else {
-      // Tenta di riconnettere dopo un ritardo
-      gameState.connectionAttempts = (gameState.connectionAttempts || 0) + 1;
-      
-      // Calcola ritardo esponenziale (max 30 secondi)
-      const delay = Math.min(1000 * Math.pow(1.5, gameState.connectionAttempts - 1), 30000);
-      
-      console.log(`Tentativo di riconnessione in ${delay/1000} secondi...`);
-      setTimeout(connectWebSocket, delay);
-    }
-  };
-  
-  socket.onerror = function(error) {
-    console.error('Errore WebSocket:', error);
-    showMessage('Errore di connessione al server', 'error');
-  };
-  
-  socket.onmessage = function(event) {
-    try {
-      // Supporto sia per JSON che MessagePack
-      let data;
-      try {
-        // Prima tenta di decodificare con MessagePack
-        if (event.data instanceof Blob) {
-          // Converte Blob in ArrayBuffer
-          event.data.arrayBuffer().then(buffer => {
-            const data = msgpack.decode(new Uint8Array(buffer));
-            handleMessage(data);
-          });
-          return;
-        } else if (event.data instanceof ArrayBuffer) {
-          data = msgpack.decode(new Uint8Array(event.data));
-        } else {
-          // Fallback a JSON
-          data = JSON.parse(event.data);
-        }
-      } catch (e) {
-        // Fallback a JSON
-        data = JSON.parse(event.data);
-      }
-      
-      handleMessage(data);
-    } catch (error) {
-      console.error('Errore nella gestione del messaggio:', error);
-    }
-  };
-}
-
-// Separare la gestione dei messaggi per maggiore chiarezza
-function handleMessage(data) {
-  // Aggiorna il timestamp dell'ultimo messaggio ricevuto
-  gameState.lastServerMessage = Date.now();
-  
-  switch (data.type) {
-    case 'welcome':
-      // Messaggio di benvenuto con stato iniziale
-      handleWelcomeMessage(data);
-      break;
-      
-    case 'state':
-      // Aggiornamento completo dello stato
-      handleStateUpdate(data);
-      break;
-      
-    case 'updates':
-      // Aggiornamenti parziali (ottimizzati)
-      handlePlayerUpdates(data);
-      break;
-      
-    case 'join':
-      // Nuovo giocatore
-      handlePlayerJoin(data);
-      break;
-      
-    case 'leave':
-      // Giocatore disconnesso
-      handlePlayerLeave(data);
-      break;
-      
-    case 'playerEaten':
-      // Giocatore mangiato
-      handlePlayerEaten(data);
-      break;
-      
-    case 'error':
-      // Messaggio di errore dal server
-      console.error('Errore dal server:', data.message);
-      showMessage(data.message || 'Errore dal server', 'error');
-      break;
-      
-    default:
-      console.warn('Tipo di messaggio sconosciuto:', data.type);
-  }
-}
-
-// Gestione messaggio di benvenuto
-function handleWelcomeMessage(data) {
-  console.log('Benvenuto, ID:', data.playerId);
-  
-  // Salva l'ID del giocatore
-  gameState.playerId = data.playerId;
-  
-  // Assicurati che il giocatore locale esista
-  if (!gameState.players.has(gameState.playerId)) {
-    const localPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
-    if (localPlayer) {
-      const screenWidth = app.renderer.width;
-      const screenHeight = app.renderer.height;
-      
-      localPlayer.x = screenWidth / 2;
-      localPlayer.y = screenHeight / 2;
-      
-      gameState.players.set(gameState.playerId, localPlayer);
-      gameState.lastPosition = { x: localPlayer.x, y: localPlayer.y };
-    }
-  }
-  
-  // Aggiorna tutti i giocatori
-  data.players.forEach(playerData => {
-    if (playerData.id !== gameState.playerId) {
-      updateOrCreatePlayer(playerData);
-    }
-  });
-  
-  // Mostra messaggio di benvenuto
-  showMessage('Connesso al server!', 'success');
-  
-  console.log(`Server sincronizzato, ${data.players.length} giocatori online`);
-}
-
-// Aggiorna o crea un giocatore
-function updateOrCreatePlayer(playerData) {
-  if (!playerData || !playerData.id) return;
-  
-  let player = gameState.players.get(playerData.id);
-  const isLocal = playerData.id === gameState.playerId;
-  
-  if (!player) {
-    // Crea un nuovo sprite per questo giocatore
-    player = createPlayerSprite(playerData.id, isLocal, playerData.size || INITIAL_SIZE);
-    
-    // Aggiungi al gameState
-    gameState.players.set(playerData.id, player);
-  }
-  
-  // Aggiorna le proprietà del giocatore
-  if (player) {
-    if (isLocal) {
-      // Per il giocatore locale usiamo la position corrente
-      // ma aggiungiamo un po' di correzione se il server è troppo divergente
-      const serverX = playerData.x;
-      const serverY = playerData.y;
-      const localX = player.x;
-      const localY = player.y;
-      
-      // Calcola distanza
-      const dx = serverX - localX;
-      const dy = serverY - localY;
-      const distance = Math.sqrt(dx*dx + dy*dy);
-      
-      // Se la divergenza è grande, correggila gradualmente
-      if (distance > 100) {
-        player.x += dx * 0.2;
-        player.y += dy * 0.2;
-        console.log('Correzione posizione con server:', distance.toFixed(2));
-      }
-    } else {
-      // Per gli altri giocatori impostiamo le posizioni target
-      player.targetX = playerData.x;
-      player.targetY = playerData.y;
-    }
-    
-    // Aggiorna dimensione
-    if (playerData.size && player.size !== playerData.size) {
-      updatePlayerSize(player, playerData.size);
-    }
-    
-    // Aggiorna punteggio
-    if (playerData.score !== undefined) {
-      player.score = playerData.score;
-    }
-    
-    // Aggiorna nome
-    if (playerData.name && player.children && player.children[2]) {
-      player.children[2].text = playerData.name;
-    }
-    
-    // Aggiorna colore se fornito
-    if (playerData.color && player.children && player.children[0]) {
-      player.children[0].tint = playerData.color;
-    }
-  }
-}
-
-// Gestione aggiornamento stato completo
-function handleStateUpdate(data) {
-  if (!data.players || !Array.isArray(data.players)) return;
-  
-  // Ottieni i giocatori attuali
-  const currentPlayerIds = new Set(gameState.players.keys());
-  
-  // Traccia i giocatori aggiornati
-  const updatedPlayerIds = new Set();
-  
-  // Aggiorna o crea tutti i giocatori
-  data.players.forEach(playerData => {
-    // Aggiungi uno snapshot per i giocatori remoti al predictor
-    if (playerData.id !== gameState.playerId) {
-      gameState.movementPredictor.addSnapshot(playerData);
-    }
-    
-    // Aggiorna o crea il giocatore
-    updateOrCreatePlayer(playerData);
-    updatedPlayerIds.add(playerData.id);
-  });
-  
-  // Rimuovi giocatori non più presenti (tranne il locale che dovrebbe sempre esserci)
-  currentPlayerIds.forEach(id => {
-    if (!updatedPlayerIds.has(id) && id !== gameState.playerId) {
-      const player = gameState.players.get(id);
-      if (player && player.parent) {
-        player.parent.removeChild(player);
-      }
-      gameState.players.delete(id);
-    }
-  });
-  
-  // Se non c'è il giocatore locale nel set aggiornato, assicurati che ci sia
-  if (!updatedPlayerIds.has(gameState.playerId) && gameState.playerId) {
-    const localPlayer = gameState.players.get(gameState.playerId);
-    if (!localPlayer) {
-      // Ricrea il giocatore locale
-      const newLocalPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
-      if (newLocalPlayer) {
-        const screenWidth = app.renderer.width;
-        const screenHeight = app.renderer.height;
-        
-        newLocalPlayer.x = screenWidth / 2;
-        newLocalPlayer.y = screenHeight / 2;
-        
-        gameState.players.set(gameState.playerId, newLocalPlayer);
-        gameState.lastPosition = { x: newLocalPlayer.x, y: newLocalPlayer.y };
-      }
-    }
-  }
-  
-  // Aggiorna leaderboard
-  updateLeaderboard();
-}
-
-// Inizializza il gioco quando il DOM è completamente caricato
-document.addEventListener('DOMContentLoaded', () => {
-    // Verifica che PIXI sia stato caricato correttamente
-    if (typeof PIXI === 'undefined') {
-        console.error("PIXI.js non è stato caricato. Verifica la connessione internet e ricarica la pagina.");
-        alert("Errore: Impossibile caricare la libreria grafica. Verifica la connessione internet e ricarica la pagina.");
-        return;
-    } else {
-        console.log("PIXI.js caricato, versione:", PIXI.VERSION);
-    }
-    
-    // Inizializzazione del gioco quando l'utente inserisce il nome
-    document.getElementById('start-button').addEventListener('click', () => {
-        const username = document.getElementById('username-input').value.trim();
-        if (username) {
-            // Nascondi schermata di login
-            document.getElementById('login-screen').style.display = 'none';
-            // Mostra il contenitore di gioco
-            document.getElementById('game-container').style.display = 'block';
-            
-            // Inizializza PixiJS qui, quando game-container è visibile
-            const pixiInitialized = initPixiJS();
-            
-            // Inizializza il gioco solo se PixiJS è stato inizializzato con successo
-            if (pixiInitialized) {
-                initGame(username);
-            } else {
-                // Mostra un messaggio di errore
-                const errorMessage = document.createElement('div');
-                errorMessage.className = 'game-message warning';
-                errorMessage.style.zIndex = '10000';
-                errorMessage.innerHTML = 'Non è stato possibile inizializzare il gioco. Prova ad aggiornare la pagina o utilizzare un browser più recente.';
-                document.body.appendChild(errorMessage);
-                
-                // Ripristina la schermata di login dopo un po'
-                setTimeout(() => {
-                    document.getElementById('game-container').style.display = 'none';
-                    document.getElementById('login-screen').style.display = 'flex';
-                    errorMessage.remove();
-                }, 5000);
-            }
-        }
-    });
-});
 
 // Funzione per inizializzare PixiJS
 function initPixiJS() {
