@@ -3604,19 +3604,34 @@ function setupResizeHandler() {
 
 // Configura i controlli (tastiera o touch)
 function setupControls() {
-  // Reset stato dei tasti
-  gameState.keys = {
-    w: false,
-    a: false,
-    s: false,
-    d: false
-  };
+  console.log('Inizializzazione controlli di gioco');
   
-  // Verifica se è un dispositivo mobile
-  const isMobile = isMobileDevice();
+  // Stato dei tasti per movimento WASD
+  const keyState = {};
+  
+  // Gestione input da tastiera
+  function handleKeyDown(e) {
+    keyState[e.key.toLowerCase()] = true;
+    
+    // Gestione abilità con tasti numerici
+    if (e.key >= '1' && e.key <= '3') {
+      const abilityIndex = parseInt(e.key) - 1;
+      activateAbility(abilityIndex);
+    }
+  }
+  
+  function handleKeyUp(e) {
+    keyState[e.key.toLowerCase()] = false;
+  }
+  
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+  
+  // Gestione input touch/mouse per dispositivi mobili
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   
   if (isMobile) {
-    // Setup controlli touch per mobile
+    console.log('Rilevato dispositivo mobile, configurazione controlli touch');
     setupMobileControls();
   } else {
     // Setup keyboard controls per desktop
@@ -3626,7 +3641,15 @@ function setupControls() {
   // Aggiungi handler abilità
   setupAbilityControls();
   
-  console.log(`Controlli inizializzati per ${isMobile ? 'dispositivi mobili' : 'desktop'}`);
+  // Funzione per pulire gli event listener quando necessario
+  function cleanup() {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+    // Rimuovi altri listener se necessario
+  }
+  
+  console.log('Controlli inizializzati correttamente');
+  return { keyState, cleanup };
 }
 
 // Configura controlli da tastiera
@@ -3699,42 +3722,115 @@ function setupKeyboardControls() {
   });
 }
 
-// Configura controlli per dispositivi mobili
+// Funzione di supporto per i controlli mobile
 function setupMobileControls() {
-  // Crea un container per i controlli mobili
-  const mobileControls = document.createElement('div');
-  mobileControls.id = 'mobile-controls';
-  mobileControls.style.position = 'absolute';
-  mobileControls.style.bottom = '10px';
-  mobileControls.style.left = '10px';
-  mobileControls.style.zIndex = '1000';
-  mobileControls.style.opacity = MOBILE_CONFIG.controlsOpacity.toString();
-  mobileControls.style.transition = 'opacity 0.3s ease';
+  // Crea joystick virtuale
+  const joystickContainer = document.createElement('div');
+  joystickContainer.id = 'joystick-container';
+  joystickContainer.style.position = 'absolute';
+  joystickContainer.style.bottom = '20px';
+  joystickContainer.style.left = '20px';
+  joystickContainer.style.width = '100px';
+  joystickContainer.style.height = '100px';
+  joystickContainer.style.borderRadius = '50%';
+  joystickContainer.style.backgroundColor = 'rgba(0, 255, 136, 0.2)';
+  joystickContainer.style.border = '2px solid rgba(0, 255, 136, 0.5)';
+  joystickContainer.style.zIndex = '1000';
   
-  // Aggiungi al DOM
-  document.getElementById('game-container').appendChild(mobileControls);
+  const joystick = document.createElement('div');
+  joystick.id = 'joystick';
+  joystick.style.position = 'absolute';
+  joystick.style.top = '50%';
+  joystick.style.left = '50%';
+  joystick.style.transform = 'translate(-50%, -50%)';
+  joystick.style.width = '40px';
+  joystick.style.height = '40px';
+  joystick.style.borderRadius = '50%';
+  joystick.style.backgroundColor = 'rgba(0, 255, 136, 0.8)';
+  joystick.style.zIndex = '1001';
   
-  // Crea joystick
-  createJoystick(mobileControls);
+  joystickContainer.appendChild(joystick);
+  document.body.appendChild(joystickContainer);
   
-  // Crea pulsanti abilità
-  createAbilityButtons(mobileControls);
+  // Implementa la logica del joystick touch
+  // Variabili per il joystick
+  let isDragging = false;
+  const centerX = 50;
+  const centerY = 50;
   
-  // Gestisci opacità dei controlli quando inattivi
-  let controlsTimeout;
-  const resetControlsTimeout = () => {
-    clearTimeout(controlsTimeout);
-    mobileControls.style.opacity = MOBILE_CONFIG.controlsOpacity.toString();
-    controlsTimeout = setTimeout(() => {
-      mobileControls.style.opacity = '0.2';
-    }, MOBILE_CONFIG.inactivityTimeout);
+  // Calcola la posizione del joystick
+  const getJoystickPosition = (e) => {
+    const touch = e.touches[0];
+    const rect = joystickContainer.getBoundingClientRect();
+    
+    // Posizione relativa al centro del joystick
+    let x = touch.clientX - rect.left;
+    let y = touch.clientY - rect.top;
+    
+    // Calcola distanza dal centro
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Limita la distanza al raggio del joystick
+    const maxDistance = 50;
+    if (distance > maxDistance) {
+      x = centerX + (dx / distance) * maxDistance;
+      y = centerY + (dy / distance) * maxDistance;
+    }
+    
+    return { x, y, distance: Math.min(distance, maxDistance) };
   };
   
-  // Reimposta opacità quando il joystick viene toccato
-  mobileControls.addEventListener('touchstart', resetControlsTimeout);
+  // Aggiorna lo stato del joystick e i dati di movimento
+  const updateJoystickState = (x, y, normalizedDistance) => {
+    // Aggiorna posizione stick
+    joystick.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 50%))`;
+    
+    // Calcola direzione e intensità
+    const dx = x - centerX;
+    const dy = y - centerY;
+    
+    // Aggiorna stato joystick in gameState
+    gameState.joystickData = {
+      up: dy < -10,
+      down: dy > 10,
+      left: dx < -10,
+      right: dx > 10,
+      strength: normalizedDistance // Da 0 a 1
+    };
+  };
   
-  // Imposta l'opacità iniziale
-  resetControlsTimeout();
+  // Gestione eventi touch
+  joystickContainer.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    isDragging = true;
+    const pos = getJoystickPosition(e);
+    updateJoystickState(pos.x, pos.y, pos.distance / 50);
+  });
+  
+  joystickContainer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!isDragging) return;
+    
+    const pos = getJoystickPosition(e);
+    updateJoystickState(pos.x, pos.y, pos.distance / 50);
+  });
+  
+  const resetJoystick = () => {
+    isDragging = false;
+    joystick.style.transform = 'translate(-50%, -50%)';
+    gameState.joystickData = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      strength: 0
+    };
+  };
+  
+  joystickContainer.addEventListener('touchend', resetJoystick);
+  joystickContainer.addEventListener('touchcancel', resetJoystick);
 }
 
 // Crea joystick virtuale per controlli mobili
@@ -3850,6 +3946,43 @@ function createJoystick(container) {
   
   joystick.addEventListener('touchend', resetJoystick);
   joystick.addEventListener('touchcancel', resetJoystick);
+}
+
+// Funzione per attivare le abilità
+function activateAbility(index) {
+  const abilities = ['speed', 'shield', 'attack'];
+  const abilityName = abilities[index];
+  
+  if (abilityName && gameState.abilities && gameState.abilities.cooldowns) {
+    // Attiva l'abilità se disponibile e non in cooldown
+    if (gameState.abilities.cooldowns[abilityName] <= 0) {
+      console.log(`Attivazione abilità: ${abilityName}`);
+      // Logica di attivazione specifica per ogni abilità
+      switch(abilityName) {
+        case 'speed':
+          // Attiva velocità
+          gameState.abilities.active.speed = true;
+          gameState.abilities.cooldowns.speed = 10; // 10 secondi di cooldown
+          setTimeout(() => {
+            gameState.abilities.active.speed = false;
+          }, 3000); // 3 secondi di durata
+          break;
+        case 'shield':
+          // Attiva scudo
+          gameState.abilities.active.shield = true;
+          gameState.abilities.cooldowns.shield = 15; // 15 secondi di cooldown
+          setTimeout(() => {
+            gameState.abilities.active.shield = false;
+          }, 5000); // 5 secondi di durata
+          break;
+        case 'attack':
+          // Attiva attacco
+          useAttackAbility();
+          gameState.abilities.cooldowns.attack = 8; // 8 secondi di cooldown
+          break;
+      }
+    }
+  }
 }
 
 // Crea pulsanti abilità per dispositivi mobili
