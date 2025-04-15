@@ -13,6 +13,183 @@ const WORLD_CONFIG = {
   padding: 50    // Padding dai bordi
 };
 
+// Variabili di configurazione
+const PLAYER_SPEED = 5;
+const INTERPOLATION_FACTOR = 0.3;
+const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
+const MAX_ENERGY_POINTS = 30;  // Numero massimo di punti energia sulla mappa
+const ENERGY_VALUE = 5;        // Valore di ogni punto energia
+const INITIAL_SIZE = 20;       // Dimensione iniziale dei giocatori
+const MAX_SIZE = 50;           // Dimensione massima raggiungibile (ridotta da 100)
+const LEVEL_THRESHOLDS = [     // Soglie per livelli di evoluzione
+    { level: 1, size: INITIAL_SIZE, name: "Novizio" },
+    { level: 2, size: 30, name: "Guerriero", ability: "speed" },
+    { level: 3, size: 40, name: "Campione", ability: "shield" },
+    { level: 4, size: MAX_SIZE, name: "Leggenda", ability: "attack" }
+];
+
+// Configurazione mobile
+const MOBILE_CONFIG = {
+  joystickSize: 120,
+  buttonSize: 80,
+  controlsOpacity: 0.6,
+  inactivityTimeout: 3000 // ms prima che i controlli svaniscano quando inattivi
+};
+
+// Sistema di rendering ottimizzato
+const renderQualityManager = {
+  settings: {
+    maxParticles: 500,
+    qualityLevels: {
+      low: {
+        resolution: 0.5,
+        antialias: false,
+        particleDensity: 0.3,
+        maxParticles: 100,
+        filterLevel: 0
+      },
+      medium: {
+        resolution: 0.8,
+        antialias: true,
+        particleDensity: 0.6,
+        maxParticles: 300,
+        filterLevel: 1
+      },
+      high: {
+        resolution: 1.0,
+        antialias: true,
+        particleDensity: 1.0,
+        maxParticles: 500,
+        filterLevel: 2
+      }
+    },
+    autoAdjust: true,
+    currentQuality: 'medium',
+    fpsTarget: 55,
+    fpsLow: 25,
+    fpsHistory: []
+  },
+  
+  // Rileva il livello di prestazioni del dispositivo
+  detectPerformanceLevel() {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      
+      if (!gl) return 'low';
+      
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isOldDevice = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
+      
+      // Valuta il device
+      if (isMobile || isOldDevice) {
+        return 'medium';
+      } else {
+        // Info sulla GPU se disponibile
+        const gpuInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (gpuInfo) {
+          const renderer = gl.getParameter(gpuInfo.UNMASKED_RENDERER_WEBGL);
+          if (renderer) {
+            // Rileva GPU di bassa potenza
+            const lowEndGPUs = ['intel', 'hd graphics', 'intelhd', 'gma', 'mesa'];
+            if (lowEndGPUs.some(gpu => renderer.toLowerCase().includes(gpu))) {
+              return 'medium';
+            }
+          }
+        }
+        
+        return 'high';
+      }
+    } catch (e) {
+      console.warn('Errore nel rilevamento prestazioni:', e);
+      return 'medium'; // Default
+    }
+  },
+  
+  // Applica le impostazioni di qualità
+  applyQuality(level) {
+    if (!this.settings.qualityLevels[level]) {
+      console.error(`Livello di qualità non valido: ${level}`);
+      return false;
+    }
+    
+    const settings = this.settings.qualityLevels[level];
+    this.settings.currentQuality = level;
+    
+    // Applica le impostazioni di rendering se PIXI è inizializzato
+    if (app && app.renderer) {
+      console.log(`Applicazione qualità ${level}: resolution=${settings.resolution}`);
+      
+      // Imposta la risoluzione del renderer
+      app.renderer.resolution = settings.resolution;
+      
+      // Gestisci i filtri in base al livello di qualità
+      this.updateFilters(settings.filterLevel);
+      
+      // Memorizza la densità particelle per futuri effetti
+      gameState.particleDensity = settings.particleDensity;
+      gameState.maxParticles = settings.maxParticles;
+    }
+    
+    return true;
+  },
+  
+  // Aggiorna l'uso di filtri e effetti
+  updateFilters(level) {
+    // A seconda del livello, abilita o disabilita effetti specifici
+    if (level <= 0) {
+      // Disabilita tutti gli effetti avanzati
+      gameState.useAdvancedEffects = false;
+    } else {
+      // Abilita effetti in base al livello
+      gameState.useAdvancedEffects = true;
+    }
+  },
+  
+  // Monitora gli FPS e regola la qualità automaticamente
+  monitorPerformance(fps) {
+    if (!this.settings.autoAdjust) return;
+    
+    // Mantieni una storia degli FPS
+    this.settings.fpsHistory.push(fps);
+    if (this.settings.fpsHistory.length > 30) {
+      this.settings.fpsHistory.shift();
+    }
+    
+    // Calcola la media degli FPS
+    const avgFps = this.settings.fpsHistory.reduce((sum, val) => sum + val, 0) / this.settings.fpsHistory.length;
+    
+    // Regola qualità se necessario
+    if (this.settings.fpsHistory.length >= 30) {
+      if (avgFps < this.settings.fpsLow && this.settings.currentQuality !== 'low') {
+        console.log(`Performance bassa (${avgFps.toFixed(1)} FPS): passaggio a qualità bassa`);
+        this.applyQuality('low');
+      } else if (avgFps > this.settings.fpsTarget * 1.2 && this.settings.currentQuality === 'low') {
+        console.log(`Performance buona (${avgFps.toFixed(1)} FPS): passaggio a qualità media`);
+        this.applyQuality('medium');
+      } else if (avgFps > this.settings.fpsTarget * 1.5 && this.settings.currentQuality === 'medium') {
+        console.log(`Performance eccellente (${avgFps.toFixed(1)} FPS): passaggio a qualità alta`);
+        this.applyQuality('high');
+      }
+    }
+  },
+  
+  // Inizializza il gestore qualità
+  init() {
+    // Rileva e imposta la qualità iniziale
+    const initialQuality = this.detectPerformanceLevel();
+    console.log(`Livello prestazioni rilevato: ${initialQuality}`);
+    this.applyQuality(initialQuality);
+    
+    // Aggiungi dati alla configurazione di gioco
+    gameState.particleDensity = this.settings.qualityLevels[initialQuality].particleDensity;
+    gameState.maxParticles = this.settings.qualityLevels[initialQuality].maxParticles;
+    gameState.useAdvancedEffects = initialQuality !== 'low';
+    
+    return initialQuality;
+  }
+};
+
 // Estensione della classe DynamicCamera con funzionalità avanzate
 class DynamicCamera {
   constructor() {
@@ -241,21 +418,6 @@ class DynamicCamera {
   }
 }
 
-// Variabili di configurazione
-const PLAYER_SPEED = 5;
-const INTERPOLATION_FACTOR = 0.3;
-const WS_URL = getEnvVar('VITE_WS_URL', 'wss://brawl-legends-backend.onrender.com');
-const MAX_ENERGY_POINTS = 30;  // Numero massimo di punti energia sulla mappa
-const ENERGY_VALUE = 5;        // Valore di ogni punto energia
-const INITIAL_SIZE = 20;       // Dimensione iniziale dei giocatori
-const MAX_SIZE = 50;           // Dimensione massima raggiungibile (ridotta da 100)
-const LEVEL_THRESHOLDS = [     // Soglie per livelli di evoluzione
-    { level: 1, size: INITIAL_SIZE, name: "Novizio" },
-    { level: 2, size: 30, name: "Guerriero", ability: "speed" },
-    { level: 3, size: 40, name: "Campione", ability: "shield" },
-    { level: 4, size: MAX_SIZE, name: "Leggenda", ability: "attack" }
-];
-
 // Stato del gioco
 const gameState = {
     playerId: crypto.randomUUID(),
@@ -319,6 +481,11 @@ function updateFpsCounter(fps) {
   if (renderQualityManager) {
     renderQualityManager.monitorPerformance(fps);
   }
+}
+
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+         (window.innerWidth <= 800 && window.innerHeight <= 600);
 }
 
 // Modifica la funzione initGame per usare il sistema di qualità
@@ -3211,270 +3378,6 @@ function updateMinimap() {
     }
   });
 }
-
-// Sistema di rendering ottimizzato
-const renderQualityManager = {
-  settings: {
-    maxParticles: 500,
-    qualityLevels: {
-      low: {
-        resolution: 0.5,
-        antialias: false,
-        particleDensity: 0.3,
-        maxParticles: 100,
-        filterLevel: 0
-      },
-      medium: {
-        resolution: 0.8,
-        antialias: true,
-        particleDensity: 0.6,
-        maxParticles: 300,
-        filterLevel: 1
-      },
-      high: {
-        resolution: 1.0,
-        antialias: true,
-        particleDensity: 1.0,
-        maxParticles: 500,
-        filterLevel: 2
-      }
-    },
-    autoAdjust: true,
-    currentQuality: 'medium',
-    fpsTarget: 55,
-    fpsLow: 25,
-    fpsHistory: []
-  },
-  
-  // Rileva il livello di prestazioni del dispositivo
-  detectPerformanceLevel() {
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      
-      if (!gl) return 'low';
-      
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isOldDevice = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
-      
-      // Valuta il device
-      if (isMobile || isOldDevice) {
-        return 'medium';
-      } else {
-        // Info sulla GPU se disponibile
-        const gpuInfo = gl.getExtension('WEBGL_debug_renderer_info');
-        if (gpuInfo) {
-          const renderer = gl.getParameter(gpuInfo.UNMASKED_RENDERER_WEBGL);
-          if (renderer) {
-            // Rileva GPU di bassa potenza
-            const lowEndGPUs = ['intel', 'hd graphics', 'intelhd', 'gma', 'mesa'];
-            if (lowEndGPUs.some(gpu => renderer.toLowerCase().includes(gpu))) {
-              return 'medium';
-            }
-          }
-        }
-        
-        return 'high';
-      }
-    } catch (e) {
-      console.warn('Errore nel rilevamento prestazioni:', e);
-      return 'medium'; // Default
-    }
-  },
-  
-  // Applica le impostazioni di qualità
-  applyQuality(level) {
-    if (!this.settings.qualityLevels[level]) {
-      console.error(`Livello di qualità non valido: ${level}`);
-      return false;
-    }
-    
-    const settings = this.settings.qualityLevels[level];
-    this.settings.currentQuality = level;
-    
-    // Applica le impostazioni di rendering se PIXI è inizializzato
-    if (app && app.renderer) {
-      console.log(`Applicazione qualità ${level}: resolution=${settings.resolution}`);
-      
-      // Imposta la risoluzione del renderer
-      app.renderer.resolution = settings.resolution;
-      
-      // Gestisci i filtri in base al livello di qualità
-      this.updateFilters(settings.filterLevel);
-      
-      // Memorizza la densità particelle per futuri effetti
-      gameState.particleDensity = settings.particleDensity;
-      gameState.maxParticles = settings.maxParticles;
-    }
-    
-    return true;
-  },
-  
-  // Aggiorna l'uso di filtri e effetti
-  updateFilters(level) {
-    // A seconda del livello, abilita o disabilita effetti specifici
-    if (level <= 0) {
-      // Disabilita tutti gli effetti avanzati
-      gameState.useAdvancedEffects = false;
-    } else {
-      // Abilita effetti in base al livello
-      gameState.useAdvancedEffects = true;
-    }
-  },
-  
-  // Monitora gli FPS e regola la qualità automaticamente
-  monitorPerformance(fps) {
-    if (!this.settings.autoAdjust) return;
-    
-    // Mantieni una storia degli FPS
-    this.settings.fpsHistory.push(fps);
-    if (this.settings.fpsHistory.length > 30) {
-      this.settings.fpsHistory.shift();
-    }
-    
-    // Calcola la media degli FPS
-    const avgFps = this.settings.fpsHistory.reduce((sum, val) => sum + val, 0) / this.settings.fpsHistory.length;
-    
-    // Regola qualità se necessario
-    if (this.settings.fpsHistory.length >= 30) {
-      if (avgFps < this.settings.fpsLow && this.settings.currentQuality !== 'low') {
-        console.log(`Performance bassa (${avgFps.toFixed(1)} FPS): passaggio a qualità bassa`);
-        this.applyQuality('low');
-      } else if (avgFps > this.settings.fpsTarget * 1.2 && this.settings.currentQuality === 'low') {
-        console.log(`Performance buona (${avgFps.toFixed(1)} FPS): passaggio a qualità media`);
-        this.applyQuality('medium');
-      } else if (avgFps > this.settings.fpsTarget * 1.5 && this.settings.currentQuality === 'medium') {
-        console.log(`Performance eccellente (${avgFps.toFixed(1)} FPS): passaggio a qualità alta`);
-        this.applyQuality('high');
-      }
-    }
-  },
-  
-  // Inizializza il gestore qualità
-  init() {
-    // Rileva e imposta la qualità iniziale
-    const initialQuality = this.detectPerformanceLevel();
-    console.log(`Livello prestazioni rilevato: ${initialQuality}`);
-    this.applyQuality(initialQuality);
-    
-    // Aggiungi dati alla configurazione di gioco
-    gameState.particleDensity = this.settings.qualityLevels[initialQuality].particleDensity;
-    gameState.maxParticles = this.settings.qualityLevels[initialQuality].maxParticles;
-    gameState.useAdvancedEffects = initialQuality !== 'low';
-    
-    return initialQuality;
-  }
-};
-
-// Sistema per aggiornare il contatore FPS e monitorare prestazioni
-function updateFpsCounter(fps) {
-  if (!gameState.fpsCounter) return;
-  
-  // Aggiorna il testo del contatore FPS
-  gameState.fpsCounter.text = `FPS: ${Math.round(fps)}`;
-  
-  // Colora il testo in base alla performance
-  if (fps >= 50) {
-    gameState.fpsCounter.style.fill = 0x00ff00;
-  } else if (fps >= 30) {
-    gameState.fpsCounter.style.fill = 0xffff00;
-  } else {
-    gameState.fpsCounter.style.fill = 0xff0000;
-  }
-  
-  // Monitora le prestazioni per regolare la qualità
-  if (renderQualityManager) {
-    renderQualityManager.monitorPerformance(fps);
-  }
-}
-
-// Modifica la funzione initGame per usare il sistema di qualità
-function initGame() {
-  console.log("Inizializzazione del gioco");
-  
-  // Inizializza il gestore qualità prima di tutto
-  const qualityLevel = renderQualityManager.init();
-  console.log(`Inizializzazione del gioco con qualità: ${qualityLevel}`);
-  
-  // Inizializza PixiJS con le impostazioni appropriate
-  const success = initPixiJS();
-  if (!success) {
-    console.error("Fallimento nell'inizializzazione di PixiJS");
-    showMessage("Impossibile inizializzare il gioco. Prova un browser diverso o controlla la console per dettagli.", "error");
-    
-    // Torna alla schermata di login dopo un errore
-    setTimeout(() => {
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('game-container').style.display = 'none';
-    }, 3000);
-    
-    return;
-  }
-  
-  // Inizializza la camera prima del resto
-  if (!gameState.camera.init(app)) {
-    console.error("Errore nell'inizializzazione della camera");
-    return;
-  }
-  
-  // Inizializza il contatore FPS e aggiungilo all'UI
-  initFpsCounter();
-  if (gameState.fpsCounter && gameState.camera) {
-    gameState.camera.addToUI(gameState.fpsCounter);
-  }
-  
-  // Inizializza sfondo
-  createBackground();
-  
-  // Inizializza punti energia
-  initEnergyPoints();
-  
-  // Inizializza minimappa
-  createMinimap();
-  
-  // Nasconde la schermata di login
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('game-container').style.display = 'block';
-  
-  // Rileva e configura controlli mobile se necessario
-  setupControls();
-  
-  // Connetti al server
-  connectWebSocket();
-  
-  // Attiva il sistema di recupero automatico
-  setupAutomaticRecovery();
-  
-  // Imposta il loop di gioco principale
-  app.ticker.add(delta => {
-    if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
-    
-    // Aggiorna movimento
-    updateMovement(delta);
-    
-    // Aggiorna camera
-    updateCamera(delta);
-    
-    // Interpolazione altri giocatori
-    interpolateOtherPlayers(delta);
-    
-    // Aggiorna punti energia
-    updateEnergyPoints(delta);
-    
-    // Aggiorna contatore FPS
-    updateFpsCounter(app.ticker.FPS);
-    
-    // Aggiorna minimappa
-    updateMinimap();
-  });
-  
-  console.log("Gioco inizializzato con successo");
-}
-
-// Aggiorna il gameState per tracciare lo stato del contesto WebGL
-gameState.contextLost = false;
-gameState.contextLostTime = 0;
-gameState.recoveryInterval = null;
 
 // Classe per la predizione avanzata del movimento
 class MovementPredictor {
