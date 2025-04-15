@@ -509,7 +509,7 @@ function updateFpsCounter(fps) {
   // Monitora le prestazioni per regolare la qualità
   if (renderQualityManager) {
     renderQualityManager.monitorPerformance(fps);
-  });
+  }
 }
 
 function isMobileDevice() {
@@ -598,7 +598,73 @@ function initGame() {
   });
   
   // Includi la funzione updateEnergyPoints dal file separato
-  // Includi la funzione updateEnergyPoints dal file separato
+  // Funzione per aggiornare i punti energia sulla mappa
+  function updateEnergyPoints(delta) {
+    if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
+    
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (!localPlayer) return;
+    
+    // Controlla collisioni con i punti energia
+    gameState.energyPoints.forEach((point, index) => {
+      // Salta punti già raccolti
+      if (!point.visible) return;
+      
+      // Calcola distanza tra giocatore e punto energia
+      const dx = localPlayer.x - point.x;
+      const dy = localPlayer.y - point.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Se il giocatore tocca il punto energia
+      if (distance < localPlayer.size + 10) {
+        // Nascondi il punto energia
+        point.visible = false;
+        
+        // Aumenta la dimensione del giocatore
+        const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
+        localPlayer.size = newSize;
+        
+        // Aggiorna la grafica del giocatore
+        if (localPlayer.sprite) {
+          localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
+        }
+        
+        // Crea effetto particellare se abilitato
+        if (gameState.useAdvancedEffects) {
+          createParticleEffect(point.x, point.y, 0x00ff88, 20);
+        }
+        
+        // Invia aggiornamento al server
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          const message = {
+            type: 'collectEnergy',
+            id: gameState.playerId,
+            size: newSize,
+            pointIndex: index
+          };
+          socket.send(msgpack.encode(message));
+        }
+        
+        // Controlla se il giocatore ha raggiunto un nuovo livello
+        checkLevelUp(newSize);
+        
+        // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
+        setTimeout(() => {
+          if (!gameState.energyPoints || typeof gameState.energyPoints.has !== 'function' || !gameState.energyPoints.has(index)) return;
+          
+          // Nuova posizione casuale
+          const padding = 100;
+          const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+          const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+          
+          point.x = x;
+          point.y = y;
+          point.visible = true;
+        }, 10000); // 10 secondi
+      }
+    });
+  }
+  
   console.log("Gioco inizializzato con successo");
 }
 
@@ -694,7 +760,7 @@ function checkLevelUp(newSize) {
     if (levelInfo.ability) {
       showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
     }
-  });
+  };
 }
 
 // Funzione per ottenere il nome dell'abilità
@@ -754,7 +820,7 @@ function createParticleEffect(x, y, color, count) {
         app.ticker.remove(arguments.callee);
       }
     });
-  });
+  };
 }
 
 // Funzione per aggiornare la camera
@@ -1291,7 +1357,7 @@ function checkLevelUp(player) {
         showMessage(`Hai sbloccato l'abilità: ${levelData.ability.toUpperCase()}`, 'info', 3000);
       }
     }
-  });
+  };
 }
 
 // Funzione per creare punti energia in posizioni specifiche
@@ -1569,7 +1635,7 @@ function updateOrCreatePlayer(playerData) {
     if (playerData.color && player.children && player.children[0]) {
       player.children[0].tint = playerData.color;
     }
-  });
+  };
 }
 
 // Migliora la funzione di interpolazione per usare il predictor
@@ -1660,7 +1726,7 @@ function createMovementTrail(player, delta) {
         }
       });
     }
-  });
+  };
 }
 
 // Funzione per aggiornare l'HUD
@@ -1715,7 +1781,7 @@ function createBackgroundEffect() {
                 createParticle();
             }
         });
-    });
+    };
 }
 
 // Creiamo particelle singole per sostituire quelle che scompaiono
@@ -1902,7 +1968,7 @@ function sendToServer(data) {
     } catch (error) {
         console.error('Errore nell\'invio dei dati al server:', error);
         return false;
-    });
+    };
 }
 
 // Gestisce l'aggiornamento dello stato dal server
@@ -1981,7 +2047,7 @@ function handleStateUpdate(data) {
                 y: Math.round(localPlayer.y)
             });
         }
-    });
+    };
 }
 
 // Gestisce l'ingresso di un nuovo giocatore
@@ -2008,7 +2074,7 @@ function handlePlayerJoin(data) {
             // Mostra un messaggio di benvenuto
             showMessage(`${data.name || 'Nuovo giocatore'} è entrato!`, 'info');
         }
-    });
+    };
 }
 
 // Gestisce il movimento di un giocatore
@@ -2026,7 +2092,7 @@ function handlePlayerMove(data) {
             sprite.targetX = sprite.targetX + data.dx;
             sprite.targetY = sprite.targetY + data.dy;
         }
-    });
+    };
 }
 
 // Gestisce l'uscita di un giocatore
@@ -2053,7 +2119,7 @@ function handlePlayerLeave(data) {
         // Mostra un messaggio
         const playerName = sprite.children[2].text || 'Un giocatore';
         showMessage(`${playerName} è uscito`, 'info');
-    });
+    };
 }
 
 // Abilita la modalità offline (solo per sviluppo)
@@ -2232,7 +2298,7 @@ function activateAbility(ability) {
         case 'attack':
             fireAttack();
             break;
-    });
+    };
 }
 
 // Abilità: Boost di velocità
@@ -2410,7 +2476,7 @@ function fireAttack() {
             dirX: direction.x,
             dirY: direction.y
         }));
-    });
+    };
 }
 
 // Crea un proiettile
@@ -2638,7 +2704,7 @@ function showMessage(text, type = 'info') {
             
             setTimeout(() => message.remove(), 300);
         }, 2000);
-    });
+    };
 }
 
 // Funzione per inizializzare i punti energia
@@ -2717,7 +2783,7 @@ function getAbilityName(ability) {
         case 'shield': return 'Scudo Energetico';
         case 'attack': return 'Raggio Letale';
         default: return ability;
-    });
+    };
 }
 
 // Restituisce il tasto per attivare l'abilità
@@ -2727,7 +2793,7 @@ function getAbilityKey(ability) {
         case 'shield': return 'e';
         case 'attack': return 'spazio';
         default: return '?';
-    });
+    };
 }
 
 // Restituisce il livello minimo per l'abilità
@@ -2835,7 +2901,7 @@ function updatePlayerSize(player, newSize) {
     const nameText = player.children[2]; // Assume che il nome sia il terzo figlio
     if (nameText) {
         nameText.y = -newSize - 15;
-    });
+    };
 }
 
 // Crea effetto visivo per la raccolta di energia
@@ -2864,7 +2930,7 @@ function createCollectEffect(x, y) {
                 app.stage.removeChild(particle);
             }
         });
-    });
+    };
 }
 
 // Controlla se un giocatore può mangiare un altro
@@ -2910,7 +2976,7 @@ function eatPlayer(player, otherPlayer, otherId) {
             score: player.score,
             size: player.size
         }));
-    });
+    };
 }
 
 // Crea effetto visivo per mangiare un giocatore
@@ -2938,7 +3004,7 @@ function createEatEffect(x, y) {
                 app.stage.removeChild(particle);
             }
         });
-    });
+    };
 }
 
 // Funzione per controllare se un giocatore ha raccolto energia
@@ -2988,7 +3054,7 @@ function collectEnergy(player, energyPoint, energyId) {
             size: player.size,
             level: gameState.level
         }));
-    });
+    };
 }
 
 // Mostra un messaggio di level up
@@ -3030,7 +3096,7 @@ function unlockAbility(ability) {
                 activateAbility(ability);
             }
         });
-    });
+    };
 }
 
 // Controlla se il giocatore è salito di livello
@@ -3063,7 +3129,7 @@ function checkLevelUp(player) {
         
         // Aggiorna visivamente il giocatore
         updatePlayerAppearance(player, oldLevel, newLevel);
-    });
+    };
 }
 
 // Funzione per aggiornare tutti gli oggetti di gioco dopo ripristino del contesto
@@ -3135,7 +3201,7 @@ function refreshGameObjects() {
         if (player) {
             createShieldEffect(player);
         }
-    });
+    };
 }
 
 // Funzione per creare un punto energia in una posizione specifica (per il ripristino)
@@ -3461,7 +3527,7 @@ class MovementPredictor {
     
     // Se la differenza è accettabile, mantieni lo stato corrente
     return this.current;
-  });
+  };
 }
 
 // Modifica initEnergyPoints per distribuire i punti energia sulla mappa grande
@@ -3651,7 +3717,73 @@ function initGame() {
   });
   
   // Includi la funzione updateEnergyPoints dal file separato
-  // Includi la funzione updateEnergyPoints dal file separato
+  // Funzione per aggiornare i punti energia sulla mappa
+  function updateEnergyPoints(delta) {
+    if (!gameState.energyPoints || !gameState.players || !gameState.playerId) return;
+    
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (!localPlayer) return;
+    
+    // Controlla collisioni con i punti energia
+    gameState.energyPoints.forEach((point, index) => {
+      // Salta punti già raccolti
+      if (!point.visible) return;
+      
+      // Calcola distanza tra giocatore e punto energia
+      const dx = localPlayer.x - point.x;
+      const dy = localPlayer.y - point.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Se il giocatore tocca il punto energia
+      if (distance < localPlayer.size + 10) {
+        // Nascondi il punto energia
+        point.visible = false;
+        
+        // Aumenta la dimensione del giocatore
+        const newSize = Math.min(MAX_SIZE, localPlayer.size + ENERGY_VALUE);
+        localPlayer.size = newSize;
+        
+        // Aggiorna la grafica del giocatore
+        if (localPlayer.sprite) {
+          localPlayer.sprite.scale.set(newSize / INITIAL_SIZE);
+        }
+        
+        // Crea effetto particellare se abilitato
+        if (gameState.useAdvancedEffects) {
+          createParticleEffect(point.x, point.y, 0x00ff88, 20);
+        }
+        
+        // Invia aggiornamento al server
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          const message = {
+            type: 'collectEnergy',
+            id: gameState.playerId,
+            size: newSize,
+            pointIndex: index
+          };
+          socket.send(msgpack.encode(message));
+        }
+        
+        // Controlla se il giocatore ha raggiunto un nuovo livello
+        checkLevelUp(newSize);
+        
+        // Dopo un po' di tempo, ripristina il punto energia in una nuova posizione
+        setTimeout(() => {
+          if (!gameState.energyPoints || typeof gameState.energyPoints.has !== 'function' || !gameState.energyPoints.has(index)) return;
+          
+          // Nuova posizione casuale
+          const padding = 100;
+          const x = padding + Math.random() * (WORLD_CONFIG.width - padding * 2);
+          const y = padding + Math.random() * (WORLD_CONFIG.height - padding * 2);
+          
+          point.x = x;
+          point.y = y;
+          point.visible = true;
+        }, 10000); // 10 secondi
+      }
+    });
+  }
+  
   console.log("Gioco inizializzato con successo");
 }
 
@@ -3747,7 +3879,7 @@ function checkLevelUp(newSize) {
     if (levelInfo.ability) {
       showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
     }
-  });
+  };
 }
 
 // Funzione per ottenere il nome dell'abilità
@@ -3807,7 +3939,7 @@ function createParticleEffect(x, y, color, count) {
         app.ticker.remove(arguments.callee);
       }
     });
-  });
+  };
 }
 
 // Funzione per aggiornare la camera
@@ -4037,7 +4169,7 @@ class MovementPredictor {
     
     // Se la differenza è accettabile, mantieni lo stato corrente
     return this.current;
-  });
+  };
 }
 
 // Aggiungi il predictor al gameState
@@ -4089,7 +4221,7 @@ function handleDeviceOrientation() {
         // Aggiungi listener per il cambio di orientamento
         window.addEventListener('resize', checkOrientation);
         window.addEventListener('orientationchange', checkOrientation);
-    });
+    };
 }
 
         // Verifica le dimensioni e orientamento per dispositivi mobili
@@ -4512,7 +4644,7 @@ function activateAbility(index) {
           break;
       }
     }
-  });
+  };
 }
 
 // Crea pulsanti abilità per dispositivi mobili
@@ -4618,5 +4750,135 @@ function setupAbilityControls() {
     
     // Aggiungi al game container
     document.getElementById('game-container').appendChild(abilitiesUI);
+  };
+}//Logica di attivazione specifica per ogni abilità
+      switch(abilityName) {
+        case 'speed':
+          // Attiva velocità
+          gameState.abilities.active.speed = true;
+          gameState.abilities.cooldowns.speed = 10; // 10 secondi di cooldown
+          setTimeout(() => {
+            gameState.abilities.active.speed = false;
+          }, 3000); // 3 secondi di durata
+          break;
+        case 'shield':
+          // Attiva scudo
+          gameState.abilities.active.shield = true;
+          gameState.abilities.cooldowns.shield = 15; // 15 secondi di cooldown
+          setTimeout(() => {
+            gameState.abilities.active.shield = false;
+          }, 5000); // 5 secondi di durata
+          break;
+        case 'attack':
+          // Attiva attacco
+          useAttackAbility();
+          gameState.abilities.cooldowns.attack = 8; // 8 secondi di cooldown
+          break;
+      }
+    
+
+// Crea pulsanti abilità per dispositivi mobili
+function createAbilityButtons(container) {
+  const abilitiesContainer = document.createElement('div');
+  abilitiesContainer.style.position = 'absolute';
+  abilitiesContainer.style.bottom = '10px';
+  abilitiesContainer.style.right = '10px';
+  abilitiesContainer.style.display = 'flex';
+  abilitiesContainer.style.gap = '10px';
+  
+  // Abilità disponibili
+  const abilities = ['speed', 'shield', 'attack'];
+  
+  // Crea un pulsante per ogni abilità
+  abilities.forEach((ability, index) => {
+    const button = document.createElement('div');
+    button.id = `ability-${ability}`;
+    button.className = 'ability-button';
+    button.style.width = `${MOBILE_CONFIG.buttonSize}px`;
+    button.style.height = `${MOBILE_CONFIG.buttonSize}px`;
+    button.style.borderRadius = '50%';
+    button.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+    button.style.border = '2px solid rgba(255, 255, 255, 0.5)';
+    button.style.boxSizing = 'border-box';
+    button.style.display = 'flex';
+    button.style.alignItems = 'center';
+    button.style.justifyContent = 'center';
+    button.style.fontSize = '24px';
+    button.style.color = 'white';
+    button.style.textShadow = '0 0 3px rgba(0,0,0,0.8)';
+    
+    // Aggiungi icona o testo
+    button.innerHTML = index + 1;
+    
+    // Aggiungi al container
+    abilitiesContainer.appendChild(button);
+    
+    // Aggiungi event listeners
+    button.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (gameState.abilities && gameState.abilities.cooldowns[ability] <= 0) {
+        button.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+        activateAbility(ability);
+      }
+    });
+    
+    button.addEventListener('touchend', () => {
+      button.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+    });
   });
+  
+  // Aggiungi container abilità al game container
+  document.getElementById('game-container').appendChild(abilitiesContainer);
+}
+
+// Configura controlli per abilità con tasti e pulsanti UI
+function setupAbilityControls() {
+  // Crea pulsanti UI per abilità anche su desktop
+  if (!isMobileDevice()) {
+    const abilitiesUI = document.createElement('div');
+    abilitiesUI.style.position = 'absolute';
+    abilitiesUI.style.bottom = '10px';
+    abilitiesUI.style.left = '50%';
+    abilitiesUI.style.transform = 'translateX(-50%)';
+    abilitiesUI.style.display = 'flex';
+    abilitiesUI.style.gap = '10px';
+    
+    // Abilità disponibili
+    const abilities = [
+      { key: 'speed', name: 'Velocità', hotkey: '1' },
+      { key: 'shield', name: 'Scudo', hotkey: '2' },
+      { key: 'attack', name: 'Attacco', hotkey: '3' }
+    ];
+    
+    // Crea un pulsante per ogni abilità
+    abilities.forEach((ability) => {
+      const button = document.createElement('div');
+      button.id = `ability-ui-${ability.key}`;
+      button.className = 'ability-ui-button';
+      button.style.padding = '5px 15px';
+      button.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      button.style.color = 'white';
+      button.style.borderRadius = '5px';
+      button.style.cursor = 'pointer';
+      button.style.fontSize = '14px';
+      button.style.textAlign = 'center';
+      button.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+      
+      // Testo pulsante
+      button.innerHTML = `${ability.name} <span style="opacity:0.7">[${ability.hotkey}]</span>`;
+      
+      // Aggiungi event listeners
+      button.addEventListener('click', () => {
+        if (gameState.abilities && gameState.abilities.cooldowns[ability.key] <= 0) {
+          activateAbility(ability.key);
+        }
+      });
+      
+      // Aggiungi al container
+      abilitiesUI.appendChild(button);
+    });
+    
+    // Aggiungi al game container
+    document.getElementById('game-container').appendChild(abilitiesUI);
+  };
 }
