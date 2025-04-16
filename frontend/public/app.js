@@ -4791,21 +4791,44 @@ function loadGameTextures() {
 // Crea texture fallback se le immagini non possono essere caricate
 function createFallbackTextures() {
   console.log('Creazione texture fallback');
+  
+  // Assicurati che la struttura dati esista
+  if (!PIXI.Loader) {
+    PIXI.Loader = {};
+  }
+  
+  if (!PIXI.Loader.shared) {
+    PIXI.Loader.shared = { resources: {} };
+  }
+  
+  if (!PIXI.Loader.shared.resources) {
+    PIXI.Loader.shared.resources = {};
+  }
+  
+  // Crea texture fallback per player
   const playerGraphics = new PIXI.Graphics();
   playerGraphics.beginFill(0x3498db);
   playerGraphics.drawCircle(0, 0, 25);
   playerGraphics.endFill();
   
-  const playerTexture = app.renderer.generateTexture(playerGraphics);
-  PIXI.Loader.shared.resources.player = { texture: playerTexture };
-  
+  // Crea texture fallback per energy point
   const energyGraphics = new PIXI.Graphics();
   energyGraphics.beginFill(0xf1c40f);
   energyGraphics.drawCircle(0, 0, 15);
   energyGraphics.endFill();
   
-  const energyTexture = app.renderer.generateTexture(energyGraphics);
-  PIXI.Loader.shared.resources.energy = { texture: energyTexture };
+  // Genera texture da graphics e salva nei resources
+  try {
+    const playerTexture = app.renderer.generateTexture(playerGraphics);
+    const energyTexture = app.renderer.generateTexture(energyGraphics);
+    
+    PIXI.Loader.shared.resources.player = { texture: playerTexture };
+    PIXI.Loader.shared.resources.energy = { texture: energyTexture };
+    
+    console.log('Texture fallback create con successo');
+  } catch (error) {
+    console.error('Errore creazione texture fallback:', error);
+  }
 }
 
 // Migliorare initGame per garantire il caricamento dell'applicazione
@@ -4985,10 +5008,24 @@ function setupGameState() {
 function createEnergyPoint(x, y) {
   // Ottieni la texture (o usa una grafica fallback)
   let texture;
-  if (PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
-    texture = PIXI.Loader.shared.resources.energy.texture;
-  } else {
-    // Se la texture non è disponibile, crea una grafica fallback
+  
+  try {
+    // Prova prima la nuova struttura (Assets API)
+    if (PIXI.Loader && PIXI.Loader.shared && PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
+      texture = PIXI.Loader.shared.resources.energy.texture;
+    } 
+    // Fallback a generazione texture grafica
+    else {
+      console.warn('Texture energia non trovata, creazione fallback');
+      const graphics = new PIXI.Graphics();
+      graphics.beginFill(0xf1c40f);
+      graphics.drawCircle(0, 0, 15);
+      graphics.endFill();
+      texture = app.renderer.generateTexture(graphics);
+    }
+  } catch (error) {
+    console.error('Errore accesso texture:', error);
+    // Crea grafica di emergenza
     const graphics = new PIXI.Graphics();
     graphics.beginFill(0xf1c40f);
     graphics.drawCircle(0, 0, 15);
@@ -6163,64 +6200,57 @@ async function loadGameTextures() {
       
       // Verifica se PIXI.Assets è disponibile (PixiJS 7+)
       if (PIXI.Assets) {
-        // Configura Assets se necessario
-        if (!PIXI.Assets.initialized) {
-          PIXI.Assets.init({
-            preferWorkers: true
-          });
-        }
-        
-        // Carica le texture con la nuova API
-        const textures = await PIXI.Assets.load({
-          player: '/assets/images/player.png',
-          energy: '/assets/images/energy.png'
-        });
-        
-        console.log('Texture caricate con successo:', Object.keys(textures));
-        
-        // Imposta le texture nel formato che il resto del codice si aspetta
-        PIXI.Loader = PIXI.Loader || {};
-        PIXI.Loader.shared = {
-          resources: {
-            player: { texture: textures.player },
-            energy: { texture: textures.energy }
+        // Evita doppia inizializzazione per prevenire warning
+        try {
+          if (!window.assetsInitialized) {
+            console.log('Inizializzazione Assets API...');
+            PIXI.Assets.init({
+              preferWorkers: true,
+              basePath: '/'
+            });
+            window.assetsInitialized = true;
           }
-        };
-        
-        resolve(textures);
-      } 
-      // Fallback alla vecchia API Loader se Assets non è disponibile
-      else if (PIXI.Loader && PIXI.Loader.shared) {
-        console.log('Utilizzo vecchia API Loader');
-        const loader = PIXI.Loader.shared;
-        
-        if (!loader.resources.player || !loader.resources.energy) {
-          loader.add('player', '/assets/images/player.png')
-                .add('energy', '/assets/images/energy.png');
-          
-          loader.onComplete.add(() => {
-            console.log('Texture caricate con vecchia API');
-            resolve();
-          });
-          
-          loader.onError.add((error) => {
-            console.error('Errore caricamento texture:', error);
-            createFallbackTextures();
-            resolve();
-          });
-          
-          loader.load();
-        } else {
-          console.log('Texture già caricate');
-          resolve();
+        } catch (initError) {
+          console.warn('Errore inizializzazione Assets:', initError);
         }
-      } 
-      // Se nessuna API di caricamento è disponibile, usa fallback
-      else {
-        console.warn('Nessuna API di caricamento disponibile, utilizzo texture fallback');
-        createFallbackTextures();
-        resolve();
+        
+        try {
+          // Usa addBundle invece di load diretto
+          PIXI.Assets.addBundle('game', {
+            player: '/assets/images/player.png',
+            energy: '/assets/images/energy.png'
+          });
+          
+          // Carica bundle con gestione errore più robusta
+          const textures = await PIXI.Assets.loadBundle('game')
+            .catch(e => {
+              throw new Error('Errore caricamento texture: ' + e.message);
+            });
+          
+          console.log('Texture caricate con successo:', Object.keys(textures));
+          
+          // Imposta le texture nel formato che il resto del codice si aspetta
+          PIXI.Loader = PIXI.Loader || {};
+          PIXI.Loader.shared = {
+            resources: {
+              player: { texture: textures.player },
+              energy: { texture: textures.energy }
+            }
+          };
+          
+          resolve(textures);
+          return;
+        } catch (loadError) {
+          console.error('Errore caricamento bundle:', loadError);
+          // Prosegui con il fallback
+        }
       }
+      
+      // Fallback alla vecchia API o texture generate
+      console.warn('Fallback a texture generate');
+      createFallbackTextures();
+      resolve();
+      
     } catch (error) {
       console.error('Errore caricamento texture:', error);
       console.log('Creazione texture fallback...');
@@ -6230,52 +6260,159 @@ async function loadGameTextures() {
   });
 }
 
-// Crea texture fallback se le immagini non possono essere caricate
-function createFallbackTextures() {
-  console.log('Creazione texture fallback');
+// ... existing code ...
+
+// Correggi gli event handler per la tastiera con controlli di sicurezza
+function setupKeyboardControls() {
+  const keyState = {};
   
-  // Assicurati che la struttura dati esista
-  if (!PIXI.Loader) {
-    PIXI.Loader = {};
+  function handleKeyDown(e) {
+    try {
+      // Controllo sicuro con optional chaining
+      if (!e || e.repeat) return;
+      const key = e.key?.toLowerCase() || e.code?.toLowerCase();
+      if (key) {
+        keyState[key] = true;
+        
+        // Gestione dei movimenti
+        if (key === 'w' || key === 'arrowup') {
+          gameState.moveUp = true;
+        } else if (key === 's' || key === 'arrowdown') {
+          gameState.moveDown = true;
+        } else if (key === 'a' || key === 'arrowleft') {
+          gameState.moveLeft = true;
+        } else if (key === 'd' || key === 'arrowright') {
+          gameState.moveRight = true;
+        }
+        
+        // Abilità
+        if (key === '1' || key === '2' || key === '3') {
+          const abilityIndex = parseInt(key) - 1;
+          activateAbility(abilityIndex);
+        }
+      }
+    } catch (error) {
+      console.error('Errore in handleKeyDown:', error);
+    }
   }
   
-  if (!PIXI.Loader.shared) {
-    PIXI.Loader.shared = { resources: {} };
+  function handleKeyUp(e) {
+    try {
+      // Controllo sicuro con optional chaining
+      if (!e) return;
+      const key = e.key?.toLowerCase() || e.code?.toLowerCase();
+      if (key) {
+        keyState[key] = false;
+        
+        // Gestione dei movimenti
+        if (key === 'w' || key === 'arrowup') {
+          gameState.moveUp = false;
+        } else if (key === 's' || key === 'arrowdown') {
+          gameState.moveDown = false;
+        } else if (key === 'a' || key === 'arrowleft') {
+          gameState.moveLeft = false;
+        } else if (key === 'd' || key === 'arrowright') {
+          gameState.moveRight = false;
+        }
+      }
+    } catch (error) {
+      console.error('Errore in handleKeyUp:', error);
+    }
   }
   
-  if (!PIXI.Loader.shared.resources) {
-    PIXI.Loader.shared.resources = {};
-  }
-  
-  // Crea texture fallback per player
-  const playerGraphics = new PIXI.Graphics();
-  playerGraphics.beginFill(0x3498db);
-  playerGraphics.drawCircle(0, 0, 25);
-  playerGraphics.endFill();
-  
-  // Crea texture fallback per energy point
-  const energyGraphics = new PIXI.Graphics();
-  energyGraphics.beginFill(0xf1c40f);
-  energyGraphics.drawCircle(0, 0, 15);
-  energyGraphics.endFill();
-  
-  // Genera texture da graphics e salva nei resources
+  // Aggiunta sicura degli event listener
   try {
-    const playerTexture = app.renderer.generateTexture(playerGraphics);
-    const energyTexture = app.renderer.generateTexture(energyGraphics);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     
-    PIXI.Loader.shared.resources.player = { texture: playerTexture };
-    PIXI.Loader.shared.resources.energy = { texture: energyTexture };
-    
-    console.log('Texture fallback create con successo');
+    console.log('Controlli da tastiera configurati');
   } catch (error) {
-    console.error('Errore creazione texture fallback:', error);
+    console.error('Errore configurazione controlli:', error);
+  }
+  
+  return function cleanup() {
+    try {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    } catch (error) {
+      console.error('Errore rimozione listener:', error);
+    }
+  };
+}
+
+// ... existing code ...
+
+// Migliora createEnergyPoint per una gestione più robusta degli errori
+function createEnergyPoint(x, y) {
+  // Ottieni la texture (o usa una grafica fallback)
+  let texture;
+  
+  try {
+    // Prova prima la nuova struttura (Assets API)
+    if (PIXI.Loader && PIXI.Loader.shared && PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
+      texture = PIXI.Loader.shared.resources.energy.texture;
+    } 
+    // Fallback a generazione texture grafica
+    else {
+      console.warn('Texture energia non trovata, creazione fallback');
+      const graphics = new PIXI.Graphics();
+      graphics.beginFill(0xf1c40f);
+      graphics.drawCircle(0, 0, 15);
+      graphics.endFill();
+      texture = app.renderer.generateTexture(graphics);
+    }
+  } catch (error) {
+    console.error('Errore accesso texture:', error);
+    // Crea grafica di emergenza
+    const graphics = new PIXI.Graphics();
+    graphics.beginFill(0xf1c40f);
+    graphics.drawCircle(0, 0, 15);
+    graphics.endFill();
+    texture = app.renderer.generateTexture(graphics);
+  }
+  
+  // Crea uno sprite con la texture
+  try {
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.x = x;
+    sprite.y = y;
+    sprite.width = 20;  
+    sprite.height = 20;
+    
+    // Aggiungi effetto glow se filtri sono disponibili
+    try {
+      if (PIXI.filters && PIXI.filters.GlowFilter) {
+        const glowFilter = new PIXI.filters.GlowFilter({
+          distance: 15,
+          outerStrength: 2,
+          innerStrength: 1,
+          color: 0xf1c40f
+        });
+        sprite.filters = [glowFilter];
+      }
+    } catch (e) {
+      console.warn('Filtri non disponibili per effetto glow');
+    }
+    
+    // Aggiungi al container
+    if (gameState.containers && gameState.containers.energy) {
+      gameState.containers.energy.addChild(sprite);
+      console.log(`Energy point creato a ${x},${y}`);
+    } else {
+      console.warn('Container energia non disponibile');
+    }
+    
+    return sprite;
+  } catch (spriteError) {
+    console.error('Errore creazione sprite:', spriteError);
+    return null;
   }
 }
 
 // ... existing code ...
 
-// Migliora l'inizializzazione del gioco
+// Migliora l'inizializzazione del gioco con gestione errori più robusta
 async function initGame() {
   try {
     // Inizializza PixiJS se non è già inizializzato
@@ -6286,8 +6423,13 @@ async function initGame() {
     
     console.log('Inizializzazione gioco avanzata...');
     
-    // Carica texture
-    await loadGameTextures();
+    // Carica texture con gestione errori
+    try {
+      await loadGameTextures();
+    } catch (textureError) {
+      console.error('Errore caricamento texture, continuando con fallback:', textureError);
+      // Continua comunque, utilizzeremo texture generate
+    }
     
     // Verifica se anime.js è disponibile
     let animeAvailable = false;
@@ -6347,8 +6489,11 @@ async function initGame() {
     // Connect to server
     networkManager.connect();
     
-    // Setup controls
-    setupControls();
+    // Setup controls - assicurati che venga chiamato solo una volta
+    if (!gameState.controlsInitialized) {
+      setupControls();
+      gameState.controlsInitialized = true;
+    }
     
     // Followa il giocatore locale
     const localPlayer = gameState.players.get(gameState.playerId);
@@ -6356,7 +6501,7 @@ async function initGame() {
       camera.follow(localPlayer);
     }
     
-    // Inizia game loop
+    // Inizia game loop (evita duplicati)
     if (!app.ticker.started) {
       app.ticker.add(gameLoop);
       console.log('Game loop avviato');
@@ -6367,71 +6512,6 @@ async function initGame() {
     console.error('Errore inizializzazione gioco:', error);
     showMessage('Errore inizializzazione gioco. Ricarica la pagina.', 'error');
   }
-}
-
-// ... existing code ...
-
-// Aggiorna il metodo createEnergyPoint per compatibilità con la nuova struttura texture
-function createEnergyPoint(x, y) {
-  // Ottieni la texture (o usa una grafica fallback)
-  let texture;
-  
-  try {
-    // Prova prima la nuova struttura (Assets API)
-    if (PIXI.Loader && PIXI.Loader.shared && PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
-      texture = PIXI.Loader.shared.resources.energy.texture;
-    } 
-    // Fallback a generazione texture grafica
-    else {
-      console.warn('Texture energia non trovata, creazione fallback');
-      const graphics = new PIXI.Graphics();
-      graphics.beginFill(0xf1c40f);
-      graphics.drawCircle(0, 0, 15);
-      graphics.endFill();
-      texture = app.renderer.generateTexture(graphics);
-    }
-  } catch (error) {
-    console.error('Errore accesso texture:', error);
-    // Crea grafica di emergenza
-    const graphics = new PIXI.Graphics();
-    graphics.beginFill(0xf1c40f);
-    graphics.drawCircle(0, 0, 15);
-    graphics.endFill();
-    texture = app.renderer.generateTexture(graphics);
-  }
-  
-  // Crea uno sprite con la texture
-  const sprite = new PIXI.Sprite(texture);
-  sprite.anchor.set(0.5);
-  sprite.x = x;
-  sprite.y = y;
-  sprite.width = 20;  
-  sprite.height = 20;
-  
-  // Aggiungi effetto glow se filtri sono disponibili
-  try {
-    if (PIXI.filters && PIXI.filters.GlowFilter) {
-      const glowFilter = new PIXI.filters.GlowFilter({
-        distance: 15,
-        outerStrength: 2,
-        innerStrength: 1,
-        color: 0xf1c40f
-      });
-      sprite.filters = [glowFilter];
-    }
-  } catch (e) {
-    console.warn('Filtri non disponibili per effetto glow');
-  }
-  
-  // Aggiungi al container
-  if (gameState.containers && gameState.containers.energy) {
-    gameState.containers.energy.addChild(sprite);
-    console.log(`Energy point creato a ${x},${y}`);
-  } else {
-    console.warn('Container energia non disponibile');
-  }
-  
-  return sprite;
 }
 
 // ... existing code ...
