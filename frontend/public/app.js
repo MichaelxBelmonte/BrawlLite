@@ -3527,7 +3527,7 @@ class MovementPredictor {
     
     // Se la differenza è accettabile, mantieni lo stato corrente
     return this.current;
-  };
+  }
 }
 
 // Modifica initEnergyPoints per distribuire i punti energia sulla mappa grande
@@ -4169,7 +4169,7 @@ class MovementPredictor {
     
     // Se la differenza è accettabile, mantieni lo stato corrente
     return this.current;
-  };
+  }
 }
 
 // Aggiungi il predictor al gameState
