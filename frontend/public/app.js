@@ -36,6 +36,108 @@ const MOBILE_CONFIG = {
   inactivityTimeout: 3000 // ms prima che i controlli svaniscano quando inattivi
 };
 
+// Classe per la predizione avanzata del movimento
+class MovementPredictor {
+  constructor() {
+    this.buffer = [];
+    this.latency = 100; // Latenza simulata in ms
+    this.maxSamples = 10; // Massimo numero di snapshot da memorizzare
+    this.lastReconciliation = 0; // Timestamp dell'ultima riconciliazione
+    
+    // Stato attuale predetto
+    this.current = null;
+    
+    // Tolleranza per riconciliazione (quanto deve essere grande la differenza)
+    this.reconciliationThreshold = 50;
+  }
+  
+  // Aggiungi un nuovo snapshot al buffer
+  addSnapshot(snapshot) {
+    if (!snapshot) return;
+    
+    this.buffer.push({
+      ...snapshot,
+      timestamp: Date.now()
+    });
+    
+    // Mantieni solo gli ultimi N snapshot
+    if (this.buffer.length > this.maxSamples) {
+      this.buffer.shift();
+    }
+  }
+  
+  // Predici lo stato attuale in base al buffer di snapshot
+  predict(currentState) {
+    // Se non abbiamo abbastanza dati o uno stato corrente, ritorna quello che abbiamo
+    if (this.buffer.length < 2 || !currentState) {
+      this.current = currentState;
+      return currentState;
+    }
+    
+    const now = Date.now();
+    const renderTime = now - this.latency;
+    
+    // Trova i due snapshot più vicini al tempo di rendering
+    let prev = this.buffer[0];
+    let next = this.buffer[1];
+    
+    for (let i = 1; i < this.buffer.length; i++) {
+      if (this.buffer[i].timestamp > renderTime) {
+        prev = this.buffer[i-1];
+        next = this.buffer[i];
+        break;
+      }
+    }
+    
+    // Se non abbiamo snapshot validi, ritorna lo stato corrente
+    if (!prev || !next || prev.timestamp === next.timestamp) {
+      this.current = currentState;
+      return currentState;
+    }
+    
+    // Calcola il fattore di interpolazione (0-1)
+    const t = Math.max(0, Math.min(1, (renderTime - prev.timestamp) / (next.timestamp - prev.timestamp)));
+    
+    // Interpola tra i due stati
+    const predicted = {
+      x: prev.x + (next.x - prev.x) * t,
+      y: prev.y + (next.y - prev.y) * t
+    };
+    
+    // Aggiorna lo stato corrente
+    this.current = predicted;
+    return predicted;
+  }
+  
+  // Riconcilia la predizione con lo stato effettivo dal server
+  reconcile(serverState) {
+    if (!this.current || !serverState) return serverState;
+    
+    // Calcola la differenza tra lo stato predetto e quello del server
+    const dx = serverState.x - this.current.x;
+    const dy = serverState.y - this.current.y;
+    const distance = Math.sqrt(dx*dx + dy*dy);
+    
+    // Se la differenza è troppo grande, applica una correzione graduale
+    if (distance > this.reconciliationThreshold) {
+      console.log(`Riconciliazione stato: differenza ${distance.toFixed(2)}px`);
+      
+      // Applica correzione al 20% per evitare teletrasporti bruschi
+      const correctionFactor = 0.2;
+      const corrected = {
+        x: this.current.x + dx * correctionFactor,
+        y: this.current.y + dy * correctionFactor
+      };
+      
+      this.lastReconciliation = Date.now();
+      return corrected;
+    }
+    
+    // Se la differenza è accettabile, mantieni lo stato corrente
+    return this.current;
+  }
+}
+
 // Sistema di rendering ottimizzato
 const renderQualityManager = {
   settings: {
@@ -3428,108 +3530,6 @@ function createBackground() {
   return background;
 }
 
-// Classe per la predizione avanzata del movimento
-class MovementPredictor {
-  constructor() {
-    this.buffer = [];
-    this.latency = 100; // Latenza simulata in ms
-    this.maxSamples = 10; // Massimo numero di snapshot da memorizzare
-    this.lastReconciliation = 0; // Timestamp dell'ultima riconciliazione
-    
-    // Stato attuale predetto
-    this.current = null;
-    
-    // Tolleranza per riconciliazione (quanto deve essere grande la differenza)
-    this.reconciliationThreshold = 50;
-  }
-  
-  // Aggiungi un nuovo snapshot al buffer
-  addSnapshot(snapshot) {
-    if (!snapshot) return;
-    
-    this.buffer.push({
-      ...snapshot,
-      timestamp: Date.now()
-    });
-    
-    // Mantieni solo gli ultimi N snapshot
-    if (this.buffer.length > this.maxSamples) {
-      this.buffer.shift();
-    }
-  }
-  
-  // Predici lo stato attuale in base al buffer di snapshot
-  predict(currentState) {
-    // Se non abbiamo abbastanza dati o uno stato corrente, ritorna quello che abbiamo
-    if (this.buffer.length < 2 || !currentState) {
-      this.current = currentState;
-      return currentState;
-    }
-    
-    const now = Date.now();
-    const renderTime = now - this.latency;
-    
-    // Trova i due snapshot più vicini al tempo di rendering
-    let prev = this.buffer[0];
-    let next = this.buffer[1];
-    
-    for (let i = 1; i < this.buffer.length; i++) {
-      if (this.buffer[i].timestamp > renderTime) {
-        prev = this.buffer[i-1];
-        next = this.buffer[i];
-        break;
-      }
-    }
-    
-    // Se non abbiamo snapshot validi, ritorna lo stato corrente
-    if (!prev || !next || prev.timestamp === next.timestamp) {
-      this.current = currentState;
-      return currentState;
-    }
-    
-    // Calcola il fattore di interpolazione (0-1)
-    const t = Math.max(0, Math.min(1, (renderTime - prev.timestamp) / (next.timestamp - prev.timestamp)));
-    
-    // Interpola tra i due stati
-    const predicted = {
-      x: prev.x + (next.x - prev.x) * t,
-      y: prev.y + (next.y - prev.y) * t
-    };
-    
-    // Aggiorna lo stato corrente
-    this.current = predicted;
-    return predicted;
-  }
-  
-  // Riconcilia la predizione con lo stato effettivo dal server
-  reconcile(serverState) {
-    if (!this.current || !serverState) return serverState;
-    
-    // Calcola la differenza tra lo stato predetto e quello del server
-    const dx = serverState.x - this.current.x;
-    const dy = serverState.y - this.current.y;
-    const distance = Math.sqrt(dx*dx + dy*dy);
-    
-    // Se la differenza è troppo grande, applica una correzione graduale
-    if (distance > this.reconciliationThreshold) {
-      console.log(`Riconciliazione stato: differenza ${distance.toFixed(2)}px`);
-      
-      // Applica correzione al 20% per evitare teletrasporti bruschi
-      const correctionFactor = 0.2;
-      const corrected = {
-        x: this.current.x + dx * correctionFactor,
-        y: this.current.y + dy * correctionFactor
-      };
-      
-      this.lastReconciliation = Date.now();
-      return corrected;
-    }
-    
-    // Se la differenza è accettabile, mantieni lo stato corrente
-    return this.current;
-  }
-}
-
 // Modifica initEnergyPoints per distribuire i punti energia sulla mappa grande
 function initEnergyPoints() {
   // Rimuovi punti energia esistenti
@@ -4070,9 +4070,8 @@ function updateMinimap() {
   });
 }
 
+/* Rimuovo l'inizializzazione duplicata qui poiché già definita alla riga ~1600 */
 // Aggiungi il predictor al gameState
-gameState.movementPredictor = new MovementPredictor();
-gameState.movementPredictor = new MovementPredictor();
 
 // Verifica e gestisce l'orientamento del dispositivo mobile
 function handleDeviceOrientation() {
