@@ -6154,3 +6154,284 @@ function optimizeVisibility() {
 }
 
 // ... existing code ...
+
+// Aggiorna loadGameTextures per usare l'API Assets di PixiJS 7+
+async function loadGameTextures() {
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log('Caricamento texture con Assets API...');
+      
+      // Verifica se PIXI.Assets è disponibile (PixiJS 7+)
+      if (PIXI.Assets) {
+        // Configura Assets se necessario
+        if (!PIXI.Assets.initialized) {
+          PIXI.Assets.init({
+            preferWorkers: true
+          });
+        }
+        
+        // Carica le texture con la nuova API
+        const textures = await PIXI.Assets.load({
+          player: '/assets/images/player.png',
+          energy: '/assets/images/energy.png'
+        });
+        
+        console.log('Texture caricate con successo:', Object.keys(textures));
+        
+        // Imposta le texture nel formato che il resto del codice si aspetta
+        PIXI.Loader = PIXI.Loader || {};
+        PIXI.Loader.shared = {
+          resources: {
+            player: { texture: textures.player },
+            energy: { texture: textures.energy }
+          }
+        };
+        
+        resolve(textures);
+      } 
+      // Fallback alla vecchia API Loader se Assets non è disponibile
+      else if (PIXI.Loader && PIXI.Loader.shared) {
+        console.log('Utilizzo vecchia API Loader');
+        const loader = PIXI.Loader.shared;
+        
+        if (!loader.resources.player || !loader.resources.energy) {
+          loader.add('player', '/assets/images/player.png')
+                .add('energy', '/assets/images/energy.png');
+          
+          loader.onComplete.add(() => {
+            console.log('Texture caricate con vecchia API');
+            resolve();
+          });
+          
+          loader.onError.add((error) => {
+            console.error('Errore caricamento texture:', error);
+            createFallbackTextures();
+            resolve();
+          });
+          
+          loader.load();
+        } else {
+          console.log('Texture già caricate');
+          resolve();
+        }
+      } 
+      // Se nessuna API di caricamento è disponibile, usa fallback
+      else {
+        console.warn('Nessuna API di caricamento disponibile, utilizzo texture fallback');
+        createFallbackTextures();
+        resolve();
+      }
+    } catch (error) {
+      console.error('Errore caricamento texture:', error);
+      console.log('Creazione texture fallback...');
+      createFallbackTextures();
+      resolve(); // Risolvi comunque la promise per non bloccare l'inizializzazione
+    }
+  });
+}
+
+// Crea texture fallback se le immagini non possono essere caricate
+function createFallbackTextures() {
+  console.log('Creazione texture fallback');
+  
+  // Assicurati che la struttura dati esista
+  if (!PIXI.Loader) {
+    PIXI.Loader = {};
+  }
+  
+  if (!PIXI.Loader.shared) {
+    PIXI.Loader.shared = { resources: {} };
+  }
+  
+  if (!PIXI.Loader.shared.resources) {
+    PIXI.Loader.shared.resources = {};
+  }
+  
+  // Crea texture fallback per player
+  const playerGraphics = new PIXI.Graphics();
+  playerGraphics.beginFill(0x3498db);
+  playerGraphics.drawCircle(0, 0, 25);
+  playerGraphics.endFill();
+  
+  // Crea texture fallback per energy point
+  const energyGraphics = new PIXI.Graphics();
+  energyGraphics.beginFill(0xf1c40f);
+  energyGraphics.drawCircle(0, 0, 15);
+  energyGraphics.endFill();
+  
+  // Genera texture da graphics e salva nei resources
+  try {
+    const playerTexture = app.renderer.generateTexture(playerGraphics);
+    const energyTexture = app.renderer.generateTexture(energyGraphics);
+    
+    PIXI.Loader.shared.resources.player = { texture: playerTexture };
+    PIXI.Loader.shared.resources.energy = { texture: energyTexture };
+    
+    console.log('Texture fallback create con successo');
+  } catch (error) {
+    console.error('Errore creazione texture fallback:', error);
+  }
+}
+
+// ... existing code ...
+
+// Migliora l'inizializzazione del gioco
+async function initGame() {
+  try {
+    // Inizializza PixiJS se non è già inizializzato
+    if (!app) {
+      console.log('Inizializzazione PixiJS...');
+      await initPixiJS();
+    }
+    
+    console.log('Inizializzazione gioco avanzata...');
+    
+    // Carica texture
+    await loadGameTextures();
+    
+    // Verifica se anime.js è disponibile
+    let animeAvailable = false;
+    try {
+      animeAvailable = typeof anime !== 'undefined';
+      console.log('Anime.js ' + (animeAvailable ? 'disponibile' : 'non disponibile'));
+    } catch (e) {
+      console.warn('Anime.js non disponibile, effetti animati ridotti');
+    }
+    
+    // Inizializza oggetti gioco
+    setupGameState();
+    
+    // Inizializza camera avanzata
+    const camera = new CameraSystem(app, WORLD_CONFIG.width, WORLD_CONFIG.height);
+    gameState.camera = camera;
+    
+    // Debug panel
+    const debugPanel = new DebugPanel(app);
+    gameState.debugPanel = debugPanel;
+    
+    // Chunk manager
+    const chunkManager = new ChunkManager(WORLD_CONFIG.width, WORLD_CONFIG.height);
+    gameState.chunkManager = chunkManager;
+    
+    // Crea container per tipo
+    gameState.containers = {
+      energy: new PIXI.Container(),
+      players: new PIXI.Container(),
+      effects: new PIXI.Container(),
+      debug: new PIXI.Container()
+    };
+    
+    // Aggiungi container alla camera
+    Object.values(gameState.containers).forEach(container => {
+      camera.container.addChild(container);
+    });
+    
+    // Energy system
+    const energySystem = new EnergySystem(gameState.containers.energy);
+    gameState.energySystem = energySystem;
+    energySystem.init(MAX_ENERGY_POINTS);
+    
+    // Network manager
+    const networkManager = new NetworkManager(WS_URL);
+    gameState.network = networkManager;
+    
+    // Setup handlers
+    setupNetworkHandlers(networkManager);
+    
+    // Debug visuals
+    if (gameState.debug) {
+      camera.debugDraw();
+      chunkManager.debugDraw(gameState.containers.debug);
+    }
+    
+    // Connect to server
+    networkManager.connect();
+    
+    // Setup controls
+    setupControls();
+    
+    // Followa il giocatore locale
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (localPlayer) {
+      camera.follow(localPlayer);
+    }
+    
+    // Inizia game loop
+    if (!app.ticker.started) {
+      app.ticker.add(gameLoop);
+      console.log('Game loop avviato');
+    }
+    
+    console.log('Gioco inizializzato con sistema avanzato');
+  } catch (error) {
+    console.error('Errore inizializzazione gioco:', error);
+    showMessage('Errore inizializzazione gioco. Ricarica la pagina.', 'error');
+  }
+}
+
+// ... existing code ...
+
+// Aggiorna il metodo createEnergyPoint per compatibilità con la nuova struttura texture
+function createEnergyPoint(x, y) {
+  // Ottieni la texture (o usa una grafica fallback)
+  let texture;
+  
+  try {
+    // Prova prima la nuova struttura (Assets API)
+    if (PIXI.Loader && PIXI.Loader.shared && PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
+      texture = PIXI.Loader.shared.resources.energy.texture;
+    } 
+    // Fallback a generazione texture grafica
+    else {
+      console.warn('Texture energia non trovata, creazione fallback');
+      const graphics = new PIXI.Graphics();
+      graphics.beginFill(0xf1c40f);
+      graphics.drawCircle(0, 0, 15);
+      graphics.endFill();
+      texture = app.renderer.generateTexture(graphics);
+    }
+  } catch (error) {
+    console.error('Errore accesso texture:', error);
+    // Crea grafica di emergenza
+    const graphics = new PIXI.Graphics();
+    graphics.beginFill(0xf1c40f);
+    graphics.drawCircle(0, 0, 15);
+    graphics.endFill();
+    texture = app.renderer.generateTexture(graphics);
+  }
+  
+  // Crea uno sprite con la texture
+  const sprite = new PIXI.Sprite(texture);
+  sprite.anchor.set(0.5);
+  sprite.x = x;
+  sprite.y = y;
+  sprite.width = 20;  
+  sprite.height = 20;
+  
+  // Aggiungi effetto glow se filtri sono disponibili
+  try {
+    if (PIXI.filters && PIXI.filters.GlowFilter) {
+      const glowFilter = new PIXI.filters.GlowFilter({
+        distance: 15,
+        outerStrength: 2,
+        innerStrength: 1,
+        color: 0xf1c40f
+      });
+      sprite.filters = [glowFilter];
+    }
+  } catch (e) {
+    console.warn('Filtri non disponibili per effetto glow');
+  }
+  
+  // Aggiungi al container
+  if (gameState.containers && gameState.containers.energy) {
+    gameState.containers.energy.addChild(sprite);
+    console.log(`Energy point creato a ${x},${y}`);
+  } else {
+    console.warn('Container energia non disponibile');
+  }
+  
+  return sprite;
+}
+
+// ... existing code ...
