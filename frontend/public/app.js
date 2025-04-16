@@ -4649,31 +4649,7 @@ function setupAbilityControls() {
     // Aggiungi al game container
     document.getElementById('game-container').appendChild(abilitiesUI);
   };
-}//Logica di attivazione specifica per ogni abilità
-      switch(abilityName) {
-        case 'speed':
-          // Attiva velocità
-          gameState.abilities.active.speed = true;
-          gameState.abilities.cooldowns.speed = 10; // 10 secondi di cooldown
-          setTimeout(() => {
-            gameState.abilities.active.speed = false;
-          }, 3000); // 3 secondi di durata
-          break;
-        case 'shield':
-          // Attiva scudo
-          gameState.abilities.active.shield = true;
-          gameState.abilities.cooldowns.shield = 15; // 15 secondi di cooldown
-          setTimeout(() => {
-            gameState.abilities.active.shield = false;
-          }, 5000); // 5 secondi di durata
-          break;
-        case 'attack':
-          // Attiva attacco
-          useAttackAbility();
-          gameState.abilities.cooldowns.attack = 8; // 8 secondi di cooldown
-          break;
-      }
-    
+}
 
 // Crea pulsanti abilità per dispositivi mobili
 function createAbilityButtons(container) {
