@@ -6515,3 +6515,736 @@ async function initGame() {
 }
 
 // ... existing code ...
+
+// Aggiorna loadGameTextures per gestire meglio l'API PIXI.Assets e i percorsi delle texture
+async function loadGameTextures() {
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log('Caricamento texture con Assets API...');
+      
+      // Verifica se PIXI.Assets è disponibile (PixiJS 7+)
+      if (PIXI.Assets) {
+        // Evita doppia inizializzazione per prevenire warning
+        try {
+          if (!window.assetsInitialized) {
+            console.log('Inizializzazione Assets API...');
+            PIXI.Assets.init({
+              preferWorkers: true
+            });
+            window.assetsInitialized = true;
+          }
+        } catch (initError) {
+          console.warn('Errore inizializzazione Assets:', initError);
+        }
+        
+        try {
+          // Controlliamo se il bundle è già stato registrato
+          const bundleName = 'gameAssets' + Date.now(); // Nome unico per evitare conflitti
+          
+          console.log('Registrazione nuovo bundle:', bundleName);
+          
+          // Utilizza path relativi alla root pubblica
+          PIXI.Assets.addBundle(bundleName, {
+            player: './player.png', // path relativo
+            energy: './energy.png'  // path relativo
+          });
+          
+          console.log('Tentativo caricamento texture...');
+          
+          // Tenta di caricare - se fallisce, usa fallback senza errori
+          try {
+            const textures = await PIXI.Assets.loadBundle(bundleName);
+            console.log('Texture caricate con successo:', Object.keys(textures));
+            
+            // Imposta le texture nel formato che il resto del codice si aspetta
+            PIXI.Loader = PIXI.Loader || {};
+            PIXI.Loader.shared = {
+              resources: {
+                player: { texture: textures.player },
+                energy: { texture: textures.energy }
+              }
+            };
+            
+            resolve(textures);
+            return;
+          } catch (loadError) {
+            console.warn('Fallback a texture generate per errore:', loadError.message);
+            // Continua con il fallback
+          }
+        } catch (loadError) {
+          console.error('Errore caricamento bundle:', loadError);
+          // Prosegui con il fallback
+        }
+      }
+      
+      // Fallback alla vecchia API o texture generate
+      console.warn('Fallback a texture generate');
+      createFallbackTextures();
+      resolve();
+      
+    } catch (error) {
+      console.error('Errore caricamento texture:', error);
+      console.log('Creazione texture fallback...');
+      createFallbackTextures();
+      resolve(); // Risolvi comunque la promise per non bloccare l'inizializzazione
+    }
+  });
+}
+
+// ... existing code ...
+
+// Funzione di protezione per gli event handler della tastiera
+function safeKeyCode(e) {
+  if (!e) return '';
+  if (typeof e.key === 'string') return e.key.toLowerCase();
+  if (typeof e.code === 'string') return e.code.toLowerCase();
+  return '';
+}
+
+// Sostituisce handleKeyDown in modo sicuro
+function handleKeyDown(e) {
+  try {
+    if (!e || e.repeat) return;
+    const key = safeKeyCode(e);
+    
+    if (key === 'w' || key === 'arrowup' || key === 'keyw') {
+      if (gameState) gameState.moveUp = true;
+    } else if (key === 's' || key === 'arrowdown' || key === 'keys') {
+      if (gameState) gameState.moveDown = true;
+    } else if (key === 'a' || key === 'arrowleft' || key === 'keya') {
+      if (gameState) gameState.moveLeft = true;
+    } else if (key === 'd' || key === 'arrowright' || key === 'keyd') {
+      if (gameState) gameState.moveRight = true;
+    }
+    
+    // Abilità (1-3)
+    if (key === '1' || key === '2' || key === '3' || key === 'digit1' || key === 'digit2' || key === 'digit3') {
+      const abilityIndex = parseInt(key.replace('digit', '')) - 1;
+      if (typeof activateAbility === 'function') {
+        activateAbility(abilityIndex);
+      }
+    }
+  } catch (error) {
+    console.error('Errore in handleKeyDown:', error);
+  }
+}
+
+// Sostituisce handleKeyUp in modo sicuro
+function handleKeyUp(e) {
+  try {
+    if (!e) return;
+    const key = safeKeyCode(e);
+    
+    if (key === 'w' || key === 'arrowup' || key === 'keyw') {
+      if (gameState) gameState.moveUp = false;
+    } else if (key === 's' || key === 'arrowdown' || key === 'keys') {
+      if (gameState) gameState.moveDown = false;
+    } else if (key === 'a' || key === 'arrowleft' || key === 'keya') {
+      if (gameState) gameState.moveLeft = false;
+    } else if (key === 'd' || key === 'arrowright' || key === 'keyd') {
+      if (gameState) gameState.moveRight = false;
+    }
+  } catch (error) {
+    console.error('Errore in handleKeyUp:', error);
+  }
+}
+
+// Funzione helper per verificare i tipi in modo sicuro
+function safeType(value, expectedType) {
+  if (value === undefined || value === null) return false;
+  return typeof value === expectedType;
+}
+
+// ... existing code ...
+
+// Classe per gestire il caricamento e la gestione degli asset
+class AssetManager {
+  constructor() {
+    this.textures = {};
+    this.initialized = false;
+    this.fallbackCreated = false;
+    this.loadingPromise = null;
+  }
+  
+  // Inizializza l'asset manager
+  init() {
+    if (this.initialized) return Promise.resolve();
+    console.log('Inizializzazione AssetManager');
+    
+    // Determina la base URL in base all'ambiente
+    this.baseUrl = this._getBaseUrl();
+    console.log(`Base URL per assets: ${this.baseUrl}`);
+    
+    this.initialized = true;
+    return this.loadTextures();
+  }
+  
+  // Ottiene la base URL appropriata per l'ambiente (local/vercel)
+  _getBaseUrl() {
+    // Se su Vercel, aggiusta i percorsi
+    if (window.location.hostname.includes('vercel.app')) {
+      return '/';
+    }
+    
+    // In locale o altri ambienti
+    return '/';
+  }
+  
+  // Carica tutte le texture necessarie
+  loadTextures() {
+    // Se è già in corso un caricamento, ritorna quella Promise
+    if (this.loadingPromise) return this.loadingPromise;
+    
+    this.loadingPromise = new Promise(async (resolve) => {
+      try {
+        console.log('Caricamento texture di gioco...');
+        
+        // Se PIXI.Assets è disponibile (PixiJS 7+)
+        if (PIXI.Assets) {
+          try {
+            // Inizializza Assets API
+            PIXI.Assets.init({
+              preferWorkers: true
+            });
+            
+            // Definisci le risorse da caricare con percorsi assoluti
+            PIXI.Assets.addBundle('game', {
+              player: `${this.baseUrl}assets/images/player.png`,
+              energy: `${this.baseUrl}assets/images/energy.png`,
+              shield: `${this.baseUrl}assets/images/shield.png`,
+              attack: `${this.baseUrl}assets/images/attack.png`,
+              speed: `${this.baseUrl}assets/images/speed.png`
+            });
+            
+            // Carica il bundle
+            console.log('Caricamento assets con Assets API...');
+            const loadedAssets = await PIXI.Assets.loadBundle('game');
+            
+            // Salva le texture caricate
+            this.textures = loadedAssets;
+            console.log('Texture caricate con successo', Object.keys(this.textures));
+            
+            // Compatibilità con vecchio loader
+            PIXI.Loader = PIXI.Loader || {};
+            PIXI.Loader.shared = {
+              resources: {
+                player: { texture: loadedAssets.player },
+                energy: { texture: loadedAssets.energy },
+                shield: { texture: loadedAssets.shield },
+                attack: { texture: loadedAssets.attack },
+                speed: { texture: loadedAssets.speed }
+              }
+            };
+            
+            resolve(this.textures);
+            return;
+          } catch (error) {
+            console.error('Errore caricamento Assets API:', error);
+            console.log('Fallback a metodo alternativo');
+          }
+        }
+        
+        // Fallback se PIXI.Assets non è disponibile o fallisce
+        this._createFallbackTextures();
+        resolve(this.textures);
+      } catch (error) {
+        console.error('Errore critico caricamento texture:', error);
+        this._createFallbackTextures();
+        resolve(this.textures);
+      }
+    });
+    
+    return this.loadingPromise;
+  }
+  
+  // Crea texture di fallback se il caricamento fallisce
+  _createFallbackTextures() {
+    if (this.fallbackCreated) return;
+    
+    console.log('Creazione texture fallback');
+    
+    try {
+      // Crea grafica per player
+      const playerGraphics = new PIXI.Graphics();
+      playerGraphics.beginFill(0x3498db);
+      playerGraphics.drawCircle(0, 0, 25);
+      playerGraphics.endFill();
+      
+      // Crea grafica per energy
+      const energyGraphics = new PIXI.Graphics();
+      energyGraphics.beginFill(0xf1c40f);
+      energyGraphics.drawCircle(0, 0, 15);
+      energyGraphics.endFill();
+      
+      // Crea grafica per shield
+      const shieldGraphics = new PIXI.Graphics();
+      shieldGraphics.beginFill(0x2ecc71);
+      shieldGraphics.drawCircle(0, 0, 30);
+      shieldGraphics.endFill();
+      
+      // Crea grafica per attack
+      const attackGraphics = new PIXI.Graphics();
+      attackGraphics.beginFill(0xe74c3c);
+      attackGraphics.drawCircle(0, 0, 20);
+      attackGraphics.endFill();
+      
+      // Crea grafica per speed
+      const speedGraphics = new PIXI.Graphics();
+      speedGraphics.beginFill(0x9b59b6);
+      speedGraphics.drawCircle(0, 0, 20);
+      speedGraphics.endFill();
+      
+      // Genera texture dalle grafiche
+      this.textures = {
+        player: app.renderer.generateTexture(playerGraphics),
+        energy: app.renderer.generateTexture(energyGraphics),
+        shield: app.renderer.generateTexture(shieldGraphics),
+        attack: app.renderer.generateTexture(attackGraphics),
+        speed: app.renderer.generateTexture(speedGraphics)
+      };
+      
+      // Compatibilità con vecchio loader
+      PIXI.Loader = PIXI.Loader || {};
+      PIXI.Loader.shared = {
+        resources: {
+          player: { texture: this.textures.player },
+          energy: { texture: this.textures.energy },
+          shield: { texture: this.textures.shield },
+          attack: { texture: this.textures.attack },
+          speed: { texture: this.textures.speed }
+        }
+      };
+      
+      this.fallbackCreated = true;
+      console.log('Texture fallback create con successo');
+    } catch (error) {
+      console.error('Errore critico creazione texture fallback:', error);
+    }
+  }
+  
+  // Ottiene una texture per nome
+  getTexture(name) {
+    // Verifica che la texture esista
+    if (this.textures[name]) {
+      return this.textures[name];
+    }
+    
+    // Verifica nella vecchia struttura
+    if (PIXI.Loader && PIXI.Loader.shared && 
+        PIXI.Loader.shared.resources && 
+        PIXI.Loader.shared.resources[name] && 
+        PIXI.Loader.shared.resources[name].texture) {
+      return PIXI.Loader.shared.resources[name].texture;
+    }
+    
+    console.warn(`Texture "${name}" non trovata, creazione fallback`);
+    
+    // Genera una texture di emergenza
+    const graphics = new PIXI.Graphics();
+    graphics.beginFill(0xff00ff); // Colore magenta per identificare texture mancanti
+    graphics.drawCircle(0, 0, 20);
+    graphics.endFill();
+    
+    return app.renderer.generateTexture(graphics);
+  }
+}
+
+// Istanza globale dell'asset manager
+const assetManager = new AssetManager();
+
+// ... existing code ...
+
+// Sostituisci la funzione loadGameTextures con una chiamata all'asset manager
+async function loadGameTextures() {
+  return assetManager.init();
+}
+
+// ... existing code ...
+
+// Migliora createEnergyPoint per usare l'asset manager
+function createEnergyPoint(x, y) {
+  try {
+    // Ottieni la texture usando l'assetManager
+    const texture = assetManager.getTexture('energy');
+    
+    // Crea lo sprite con la texture
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.x = x;
+    sprite.y = y;
+    sprite.width = 30;  // Dimensione aumentata per migliorare visibilità
+    sprite.height = 30;
+    
+    // Aggiungi effetto pulse per migliorare visibilità
+    const pulseAnimation = () => {
+      gsap.to(sprite.scale, {
+        x: 1.2,
+        y: 1.2,
+        duration: 0.8,
+        yoyo: true,
+        repeat: -1,
+        ease: "sine.inOut"
+      });
+    };
+    
+    pulseAnimation();
+    
+    // Aggiungi effetto glow se disponibile
+    try {
+      if (PIXI.filters && PIXI.filters.GlowFilter) {
+        const glowFilter = new PIXI.filters.GlowFilter({
+          distance: 15,
+          outerStrength: 2,
+          innerStrength: 1,
+          color: 0xffff00
+        });
+        sprite.filters = [glowFilter];
+      }
+    } catch (e) {
+      console.warn('Filter non disponibili:', e);
+    }
+    
+    // Aggiungi al container
+    if (gameState.containers && gameState.containers.energy) {
+      gameState.containers.energy.addChild(sprite);
+      console.log(`Energy point creato a ${x},${y}`);
+    } else {
+      console.warn('Container energia non disponibile, aggiunta alla stage principale');
+      app.stage.addChild(sprite);
+    }
+    
+    return sprite;
+  } catch (error) {
+    console.error('Errore createEnergyPoint:', error);
+    return null;
+  }
+}
+
+// ... existing code ...
+
+// Migliora createPlayer per usare l'asset manager
+function createPlayer(id, x, y, size, username, isCurrentPlayer = false) {
+  try {
+    // Ottieni la texture usando l'assetManager
+    const texture = assetManager.getTexture('player');
+    
+    // Crea container per il giocatore
+    const container = new PIXI.Container();
+    container.x = x;
+    container.y = y;
+    
+    // Crea sprite del giocatore
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.width = size;
+    sprite.height = size;
+    
+    // Se è il giocatore corrente, aggiungi un evidenziatore
+    if (isCurrentPlayer) {
+      const highlight = new PIXI.Graphics();
+      highlight.beginFill(0x00ff88, 0.3);
+      highlight.drawCircle(0, 0, size * 0.6);
+      highlight.endFill();
+      container.addChild(highlight);
+      
+      // Aggiunge un'animazione pulse sull'evidenziatore
+      gsap.to(highlight.scale, {
+        x: 1.2,
+        y: 1.2,
+        duration: 1,
+        repeat: -1,
+        yoyo: true,
+        ease: "sine.inOut"
+      });
+    }
+    
+    // Aggiungi lo sprite al container
+    container.addChild(sprite);
+    
+    // Aggiungi testo per il nome utente
+    const nameText = new PIXI.Text(username, {
+      fontFamily: 'Arial',
+      fontSize: 14,
+      fill: isCurrentPlayer ? 0x00ff88 : 0xffffff,
+      align: 'center',
+      dropShadow: true,
+      dropShadowColor: '#000000',
+      dropShadowBlur: 4,
+      dropShadowDistance: 1
+    });
+    nameText.anchor.set(0.5);
+    nameText.y = -size / 2 - 15;
+    container.addChild(nameText);
+    
+    // Aggiungi al container players
+    if (gameState.containers && gameState.containers.players) {
+      gameState.containers.players.addChild(container);
+    } else {
+      console.warn('Container players non disponibile, aggiunta alla stage principale');
+      app.stage.addChild(container);
+    }
+    
+    return container;
+  } catch (error) {
+    console.error('Errore createPlayer:', error);
+    return null;
+  }
+}
+
+// ... existing code ...
+
+// Migliora initGame per utilizzare l'AssetManager
+async function initGame() {
+  try {
+    console.log('Inizializzazione gioco...');
+    
+    // Inizializza PixiJS se non è già inizializzato
+    if (!app) {
+      await initPixiJS();
+    }
+    
+    // Inizializza asset manager e carica texture
+    await assetManager.init();
+    
+    // Inizializza oggetti gioco
+    setupGameState();
+    
+    // Assicurati che i container esistano prima di tutto
+    gameState.containers = {
+      background: new PIXI.Container(),
+      energy: new PIXI.Container(),
+      players: new PIXI.Container(),
+      effects: new PIXI.Container(),
+      ui: new PIXI.Container(),
+      debug: new PIXI.Container()
+    };
+    
+    // Aggiungi container alla stage in ordine corretto
+    app.stage.addChild(gameState.containers.background);
+    app.stage.addChild(gameState.containers.energy);
+    app.stage.addChild(gameState.containers.players);
+    app.stage.addChild(gameState.containers.effects);
+    app.stage.addChild(gameState.containers.ui);
+    
+    if (gameState.debug) {
+      app.stage.addChild(gameState.containers.debug);
+    }
+    
+    // Inizializza camera avanzata
+    const camera = new DynamicCamera(app, WORLD_CONFIG.width, WORLD_CONFIG.height);
+    gameState.camera = camera;
+    
+    // Adatta il renderer in base alle performance
+    const qualityManager = new RenderQualityManager(app);
+    gameState.qualityManager = qualityManager;
+    qualityManager.init();
+    
+    // Energy system
+    const energySystem = new EnergySystem(gameState.containers.energy);
+    gameState.energySystem = energySystem;
+    energySystem.init(MAX_ENERGY_POINTS);
+    
+    // Connetti al server
+    connectWebSocket();
+    
+    // Setup controlli di gioco
+    const controls = setupControls();
+    gameState.controls = controls;
+    
+    // Crea debug logger se in modalità debug
+    if (gameState.debug) {
+      createDebugPanel();
+    }
+    
+    // Setup event handlers
+    handleDeviceOrientation();
+    
+    console.log('Gioco inizializzato con successo');
+    return true;
+  } catch (error) {
+    console.error('Errore critico inizializzazione gioco:', error);
+    showMessage(`Errore inizializzazione: ${error.message}`, 'error');
+    return false;
+  }
+}
+
+// ... existing code ...
+
+// Nuova implementazione dell'EnergySystem
+class EnergySystem {
+  constructor(container) {
+    this.container = container;
+    this.points = new Map();
+    this.maxPoints = MAX_ENERGY_POINTS;
+    this.initialized = false;
+    
+    console.log('EnergySystem creato');
+  }
+  
+  // Inizializza il sistema con un numero specificato di punti
+  init(maxPoints = MAX_ENERGY_POINTS) {
+    if (this.initialized) {
+      console.log('EnergySystem già inizializzato');
+      return;
+    }
+    
+    this.maxPoints = maxPoints;
+    console.log(`Inizializzazione sistema energia con ${maxPoints} punti`);
+    
+    // Genera punti energia iniziali
+    this.generateInitialPoints();
+    
+    this.initialized = true;
+  }
+  
+  // Genera punti energia iniziali
+  generateInitialPoints() {
+    // Pulisci punti esistenti se necessario
+    this.clearPoints();
+    
+    // Crea nuovi punti energia in posizioni casuali
+    for (let i = 0; i < this.maxPoints; i++) {
+      const x = Math.random() * WORLD_CONFIG.width;
+      const y = Math.random() * WORLD_CONFIG.height;
+      this.addPoint(x, y);
+    }
+    
+    console.log(`Generati ${this.points.size} punti energia`);
+  }
+  
+  // Aggiunge un punto energia alla posizione specificata
+  addPoint(x, y) {
+    const id = `energy-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const sprite = createEnergyPoint(x, y);
+    
+    if (sprite) {
+      this.points.set(id, { id, x, y, sprite });
+      return id;
+    }
+    
+    return null;
+  }
+  
+  // Rimuove un punto energia
+  removePoint(id) {
+    const point = this.points.get(id);
+    if (point && point.sprite) {
+      if (point.sprite.parent) {
+        point.sprite.parent.removeChild(point.sprite);
+      }
+      this.points.delete(id);
+      return true;
+    }
+    return false;
+  }
+  
+  // Aggiorna tutti i punti energia
+  update(delta) {
+    if (this.points.size < this.maxPoints) {
+      // Aggiungi punti se ce ne sono meno del massimo
+      const pointsToAdd = Math.min(3, this.maxPoints - this.points.size);
+      
+      for (let i = 0; i < pointsToAdd; i++) {
+        const x = Math.random() * WORLD_CONFIG.width;
+        const y = Math.random() * WORLD_CONFIG.height;
+        this.addPoint(x, y);
+      }
+    }
+  }
+  
+  // Gestisce la raccolta di un punto energia
+  collectPoint(id, playerId) {
+    const point = this.points.get(id);
+    if (point) {
+      // Crea effetto di raccolta
+      createCollectEffect(point.x, point.y);
+      
+      // Rimuovi il punto
+      this.removePoint(id);
+      
+      // Aggiorna score e dimensione del giocatore
+      updatePlayerScore(playerId, ENERGY_VALUE);
+      
+      // Aggiungi nuovo punto in una posizione casuale
+      const x = Math.random() * WORLD_CONFIG.width;
+      const y = Math.random() * WORLD_CONFIG.height;
+      this.addPoint(x, y);
+    }
+  }
+  
+  // Elimina tutti i punti energia
+  clearPoints() {
+    this.points.forEach(point => {
+      if (point.sprite && point.sprite.parent) {
+        point.sprite.parent.removeChild(point.sprite);
+      }
+    });
+    
+    this.points.clear();
+  }
+  
+  // Converte i punti in un array per l'invio al server
+  getPointsArray() {
+    const pointsArray = [];
+    this.points.forEach(point => {
+      pointsArray.push({
+        id: point.id,
+        x: point.x,
+        y: point.y
+      });
+    });
+    return pointsArray;
+  }
+  
+  // Aggiorna i punti dal server
+  updateFromServer(pointsData) {
+    if (!Array.isArray(pointsData)) {
+      console.error('pointsData non è un array:', pointsData);
+      return;
+    }
+    
+    try {
+      // Mappatura degli ID dei punti dal server
+      const serverPointIds = new Set(pointsData.map(p => p.id));
+      
+      // Rimuovi i punti che non sono più nel server
+      this.points.forEach((point, id) => {
+        if (!serverPointIds.has(id)) {
+          this.removePoint(id);
+        }
+      });
+      
+      // Aggiungi o aggiorna punti dal server
+      pointsData.forEach(pointData => {
+        if (!this.points.has(pointData.id)) {
+          // Aggiungi nuovo punto
+          const sprite = createEnergyPoint(pointData.x, pointData.y);
+          if (sprite) {
+            this.points.set(pointData.id, {
+              id: pointData.id,
+              x: pointData.x,
+              y: pointData.y,
+              sprite
+            });
+          }
+        } else {
+          // Aggiorna posizione del punto esistente
+          const point = this.points.get(pointData.id);
+          point.x = pointData.x;
+          point.y = pointData.y;
+          
+          if (point.sprite) {
+            point.sprite.x = pointData.x;
+            point.sprite.y = pointData.y;
+          }
+        }
+      });
+      
+      console.log(`Punti energia aggiornati dal server: ${this.points.size}`);
+    } catch (error) {
+      console.error('Errore aggiornamento punti dal server:', error);
+    }
+  }
+}
+
+// ... existing code ...
