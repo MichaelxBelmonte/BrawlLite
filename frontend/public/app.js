@@ -4756,3 +4756,1401 @@ function setupAbilityControls() {
     document.getElementById('game-container').appendChild(abilitiesUI);
   };
 }
+
+// Miglioramento del caricamento delle texture
+function loadGameTextures() {
+  return new Promise((resolve, reject) => {
+    // Usa path assoluti per evitare problemi di percorso
+    const loader = PIXI.Loader.shared;
+    
+    if (!loader.resources.player || !loader.resources.energy) {
+      console.log('Caricamento texture di gioco...');
+      loader.add('player', '/assets/images/player.png')
+            .add('energy', '/assets/images/energy.png');
+      
+      loader.onComplete.add(() => {
+        console.log('Texture caricate con successo:', Object.keys(loader.resources));
+        resolve();
+      });
+      
+      loader.onError.add((error) => {
+        console.error('Errore caricamento texture:', error);
+        // In caso di errore, creiamo comunque grafica di fallback
+        createFallbackTextures();
+        resolve();
+      });
+      
+      loader.load();
+    } else {
+      console.log('Texture già caricate');
+      resolve();
+    }
+  });
+}
+
+// Crea texture fallback se le immagini non possono essere caricate
+function createFallbackTextures() {
+  console.log('Creazione texture fallback');
+  const playerGraphics = new PIXI.Graphics();
+  playerGraphics.beginFill(0x3498db);
+  playerGraphics.drawCircle(0, 0, 25);
+  playerGraphics.endFill();
+  
+  const playerTexture = app.renderer.generateTexture(playerGraphics);
+  PIXI.Loader.shared.resources.player = { texture: playerTexture };
+  
+  const energyGraphics = new PIXI.Graphics();
+  energyGraphics.beginFill(0xf1c40f);
+  energyGraphics.drawCircle(0, 0, 15);
+  energyGraphics.endFill();
+  
+  const energyTexture = app.renderer.generateTexture(energyGraphics);
+  PIXI.Loader.shared.resources.energy = { texture: energyTexture };
+}
+
+// Migliorare initGame per garantire il caricamento dell'applicazione
+async function initGame() {
+  try {
+    // Inizializza PixiJS se non è già inizializzato
+    if (!app) {
+      initPixiJS();
+    }
+    
+    console.log('Inizializzazione gioco...');
+    
+    // Assicurati che le texture siano caricate
+    await loadGameTextures();
+    
+    // Gestione forzata del giocatore e camera
+    setupGameState();
+    
+    // Inizializza il contatore FPS
+    initFpsCounter();
+    
+    // Inizializza la camera
+    gameState.camera = new DynamicCamera();
+    gameState.camera.init(app);
+    
+    // Inizializza i controlli
+    setupControls();
+    
+    // Crea contenitore root per oggetti mondo
+    if (!gameState.worldContainer) {
+      gameState.worldContainer = new PIXI.Container();
+      app.stage.addChild(gameState.worldContainer);
+    }
+    
+    // Crea contenitori dedicati per tipo
+    if (!gameState.containers) {
+      gameState.containers = {
+        energy: new PIXI.Container(),
+        players: new PIXI.Container(),
+        effects: new PIXI.Container(),
+        debug: new PIXI.Container()
+      };
+      
+      // Aggiungi i contenitori al mondo
+      Object.values(gameState.containers).forEach(container => {
+        gameState.worldContainer.addChild(container);
+      });
+    }
+    
+    // Inizializza sfere energia
+    initEnergyPoints();
+    
+    // Crea indicatore al centro del mondo per debug
+    createDebugIndicators();
+    
+    // Connetti al WebSocket
+    connectWebSocket();
+    
+    // Aggiungi debug info su schermo
+    addDebugInfo();
+    
+    // Inizia l'aggiornamento
+    if (!app.ticker.started) {
+      app.ticker.add(gameLoop);
+      console.log('Game loop avviato');
+    }
+  } catch (error) {
+    console.error('Errore in initGame:', error);
+    showMessage('Errore inizializzazione gioco. Ricarica la pagina.', 'error');
+  }
+}
+
+// Funzione per creare indicatori di debug
+function createDebugIndicators() {
+  // Pulisci contenitore debug
+  gameState.containers.debug.removeChildren();
+  
+  // Crea indicatore centro mondo
+  const worldCenter = new PIXI.Graphics();
+  worldCenter.lineStyle(2, 0xff0000);
+  worldCenter.drawCircle(0, 0, 50);
+  worldCenter.moveTo(-70, 0);
+  worldCenter.lineTo(70, 0);
+  worldCenter.moveTo(0, -70);
+  worldCenter.lineTo(0, 70);
+  worldCenter.x = WORLD_CONFIG.width / 2;
+  worldCenter.y = WORLD_CONFIG.height / 2;
+  gameState.containers.debug.addChild(worldCenter);
+  
+  // Crea bordi mondo
+  const worldBounds = new PIXI.Graphics();
+  worldBounds.lineStyle(3, 0x00ff00);
+  worldBounds.drawRect(0, 0, WORLD_CONFIG.width, WORLD_CONFIG.height);
+  gameState.containers.debug.addChild(worldBounds);
+  
+  console.log('Indicatori debug creati');
+}
+
+// Aggiungi informazioni di debug su schermo
+function addDebugInfo() {
+  if (!gameState.debugInfo) {
+    gameState.debugInfo = new PIXI.Text('Debug Info', {
+      fontFamily: 'Arial',
+      fontSize: 12,
+      fill: 0xffffff,
+      align: 'left'
+    });
+    gameState.debugInfo.position.set(10, 10);
+    gameState.debugInfo.zIndex = 1000;
+    app.stage.addChild(gameState.debugInfo);
+  }
+  
+  // Aggiorna info ogni frame
+  app.ticker.add(() => {
+    if (gameState.debugInfo) {
+      const player = gameState.players && gameState.players.get(gameState.playerId);
+      const cameraInfo = gameState.camera ? 
+        `${Math.round(gameState.camera.x)},${Math.round(gameState.camera.y)} Z:${gameState.camera.zoom.toFixed(2)}` : 'N/A';
+      
+      gameState.debugInfo.text = 
+        `FPS: ${Math.round(app.ticker.FPS)}\n` +
+        `Player: ${player ? `${Math.round(player.x)},${Math.round(player.y)}` : 'N/A'}\n` +
+        `Camera: ${cameraInfo}\n` +
+        `Energy: ${gameState.energyPoints ? gameState.energyPoints.size : 0}\n` +
+        `Players: ${gameState.players ? gameState.players.size : 0}\n` +
+        `Socket: ${socket && socket.readyState === 1 ? 'Connected' : 'Disconnected'}`;
+    }
+  });
+}
+
+// Miglioramento della function setupGameState
+function setupGameState() {
+  if (!gameState) {
+    gameState = {
+      players: new Map(),
+      energyPoints: new Map(),
+      playerId: null,
+      camera: null,
+      predictor: new MovementPredictor(),
+      lastServerMessage: Date.now(),
+      pingInterval: null,
+      containers: null,
+      worldContainer: null
+    };
+  }
+  
+  // Se non c'è playerID, creane uno nuovo
+  if (!gameState.playerId) {
+    gameState.playerId = 'local_' + Math.random().toString(36).substr(2, 9);
+    
+    // Crea player locale
+    const localPlayer = {
+      id: gameState.playerId,
+      x: WORLD_CONFIG.width / 2,
+      y: WORLD_CONFIG.height / 2,
+      vx: 0,
+      vy: 0,
+      size: 30,
+      color: 0x3498db,
+      name: 'Tu',
+      score: 0,
+      level: 1
+    };
+    
+    // Aggiungi al map players
+    gameState.players.set(gameState.playerId, localPlayer);
+    
+    // Crea sprite
+    const playerSprite = createPlayerSprite(gameState.playerId, true);
+    localPlayer.sprite = playerSprite;
+    
+    console.log('Player locale creato:', localPlayer);
+  }
+}
+
+// Migliora createEnergyPoint
+function createEnergyPoint(x, y) {
+  // Ottieni la texture (o usa una grafica fallback)
+  let texture;
+  if (PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
+    texture = PIXI.Loader.shared.resources.energy.texture;
+  } else {
+    // Se la texture non è disponibile, crea una grafica fallback
+    const graphics = new PIXI.Graphics();
+    graphics.beginFill(0xf1c40f);
+    graphics.drawCircle(0, 0, 15);
+    graphics.endFill();
+    texture = app.renderer.generateTexture(graphics);
+  }
+  
+  // Crea uno sprite con la texture
+  const sprite = new PIXI.Sprite(texture);
+  sprite.anchor.set(0.5);
+  sprite.x = x;
+  sprite.y = y;
+  sprite.width = 20;  
+  sprite.height = 20;
+  
+  // Aggiungi effetto glow
+  const glowFilter = new PIXI.filters.GlowFilter({
+    distance: 15,
+    outerStrength: 2,
+    innerStrength: 1,
+    color: 0xf1c40f
+  });
+  sprite.filters = [glowFilter];
+  
+  // Aggiungi al container
+  if (gameState.containers && gameState.containers.energy) {
+    gameState.containers.energy.addChild(sprite);
+    console.log(`Energy point creato a ${x},${y}`);
+  } else {
+    console.warn('Container energia non disponibile');
+  }
+  
+  return sprite;
+}
+
+// Migliora initEnergyPoints
+function initEnergyPoints() {
+  console.log('Inizializzazione punti energia');
+  
+  // Svuota energy points esistenti
+  if (gameState.energyPoints) {
+    gameState.energyPoints.clear();
+  } else {
+    gameState.energyPoints = new Map();
+  }
+  
+  if (gameState.containers && gameState.containers.energy) {
+    gameState.containers.energy.removeChildren();
+  }
+  
+  // Crea nuovi energy points
+  const pointsCount = MAX_ENERGY_POINTS;
+  for (let i = 0; i < pointsCount; i++) {
+    const x = Math.random() * WORLD_CONFIG.width;
+    const y = Math.random() * WORLD_CONFIG.height;
+    
+    const sprite = createEnergyPoint(x, y);
+    
+    // Salva riferimento
+    gameState.energyPoints.set(i, {
+      id: i,
+      x: x,
+      y: y,
+      sprite: sprite,
+      value: ENERGY_VALUE
+    });
+  }
+  
+  console.log(`${pointsCount} punti energia creati`);
+}
+
+// Migliora connectWebSocket
+function connectWebSocket() {
+  console.log('Connessione al WebSocket:', WS_URL);
+  
+  try {
+    socket = new WebSocket(WS_URL);
+    
+    socket.onopen = function() {
+      console.log('WebSocket connesso');
+      showMessage('Connesso al server', 'success');
+      
+      // Reset tentativi riconnessione
+      reconnectAttempts = 0;
+      
+      // Invia messaggio join
+      const joinMessage = {
+        type: 'join',
+        id: gameState.playerId,
+        name: 'Tu',
+        x: gameState.players.get(gameState.playerId).x,
+        y: gameState.players.get(gameState.playerId).y,
+        size: gameState.players.get(gameState.playerId).size,
+        color: gameState.players.get(gameState.playerId).color
+      };
+      
+      // Diagnostica
+      console.log('Invio messaggio join:', joinMessage);
+      
+      sendToServer(joinMessage);
+      
+      // Setup ping per mantenere connessione
+      if (gameState.pingInterval) {
+        clearInterval(gameState.pingInterval);
+      }
+      
+      gameState.pingInterval = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          sendToServer({ type: 'ping' });
+        }
+      }, 30000);
+    };
+    
+    socket.onclose = function() {
+      console.log('WebSocket disconnesso');
+      showMessage('Disconnesso dal server. Riconnessione...', 'error');
+      
+      // Pulisci ping timer
+      if (gameState.pingInterval) {
+        clearInterval(gameState.pingInterval);
+        gameState.pingInterval = null;
+      }
+      
+      // Riconnetti dopo delay
+      setTimeout(() => {
+        reconnectAttempts++;
+        if (reconnectAttempts < 5) {
+          connectWebSocket();
+        } else {
+          showMessage('Impossibile connettersi al server. Ricarica la pagina.', 'error');
+        }
+      }, 3000 * Math.min(reconnectAttempts, 3));
+    };
+    
+    socket.onerror = function(error) {
+      console.error('Errore WebSocket:', error);
+    };
+    
+    socket.onmessage = function(event) {
+      try {
+        // Aggiorna timestamp ultimo messaggio
+        gameState.lastServerMessage = Date.now();
+        
+        const data = JSON.parse(event.data);
+        console.log('Messaggio ricevuto:', data.type);
+        
+        // Gestisci messaggi in base al tipo
+        switch (data.type) {
+          case 'state':
+            handleStateUpdate(data);
+            break;
+          case 'join':
+            handlePlayerJoin(data);
+            break;
+          case 'move':
+            handlePlayerMove(data);
+            break;
+          case 'leave':
+            handlePlayerLeave(data);
+            break;
+          case 'error':
+            console.error('Errore dal server:', data.message);
+            showMessage('Errore: ' + data.message, 'error');
+            break;
+        }
+      } catch (error) {
+        console.error('Errore parsing messaggio WebSocket:', error);
+      }
+    };
+  } catch (error) {
+    console.error('Errore creazione WebSocket:', error);
+    showMessage('Impossibile connettersi al server', 'error');
+  }
+}
+
+// Miglioramento game loop principale
+function gameLoop(delta) {
+  // Verifica che il gioco sia inizializzato
+  if (!gameState || !gameState.camera) {
+    console.warn('Game loop: gameState non inizializzato');
+    return;
+  }
+  
+  // Aggiorna movimento
+  updateMovement(delta);
+  
+  // Aggiorna punti energia
+  updateEnergyPoints(delta);
+  
+  // Controlla collisioni
+  checkPlayerCollisions();
+  checkEnergyCollisions();
+  
+  // Interpolazione giocatori
+  interpolateOtherPlayers(delta);
+  
+  // Aggiorna la camera
+  updateCamera(delta);
+  
+  // Aggiorna HUD
+  updateHUD();
+  
+  // Aggiorna minimap
+  if (typeof updateMinimap === 'function') {
+    updateMinimap();
+  }
+}
+
+// Miglioramento updateCamera
+function updateCamera(delta) {
+  if (!gameState.camera || !gameState.players) {
+    return;
+  }
+  
+  const localPlayer = gameState.players.get(gameState.playerId);
+  if (!localPlayer) {
+    console.warn('Camera update: giocatore locale non trovato');
+    return;
+  }
+  
+  // Calcola dimensioni visibili
+  const playerCount = gameState.players.size;
+  const playerSize = localPlayer.size || 30;
+  
+  // Aggiorna posizione camera con smorzamento
+  const targetX = localPlayer.x;
+  const targetY = localPlayer.y;
+  
+  if (gameState.camera.target) {
+    gameState.camera.target.x = targetX;
+    gameState.camera.target.y = targetY;
+  } else {
+    gameState.camera.follow({ x: targetX, y: targetY });
+  }
+  
+  // Aggiorna zoom camera
+  if (playerCount > 1 && typeof gameState.camera.updateAdvancedZoom === 'function') {
+    // Se disponibile, usa zoom avanzato che considera altri giocatori
+    gameState.camera.updateAdvancedZoom([...gameState.players.values()], localPlayer);
+  } else {
+    // Altrimenti usa zoom basato solo su dimensione giocatore
+    gameState.camera.updateZoom(playerCount, playerSize);
+  }
+  
+  // Aggiorna posizione camera
+  gameState.camera.update(delta);
+}
+
+// CameraSystem - Gestione avanzata della camera
+class CameraSystem {
+  constructor(app, worldWidth, worldHeight) {
+    this.app = app;
+    this.target = null;
+    this.container = new PIXI.Container();
+    this.zoom = 1.0;
+    this.minZoom = WORLD_CONFIG.minZoom || 0.5;
+    this.maxZoom = WORLD_CONFIG.maxZoom || 1.2;
+    this.worldWidth = worldWidth || WORLD_CONFIG.width;
+    this.worldHeight = worldHeight || WORLD_CONFIG.height;
+    this.offset = { x: app.screen.width/2, y: app.screen.height/2 };
+    this.smoothing = 0.1;
+    
+    app.stage.addChild(this.container);
+  }
+
+  follow(target) {
+    this.target = target;
+  }
+
+  update(delta = 1) {
+    if(!this.target) return;
+
+    // Posizione target con interpolazione
+    const targetX = -this.target.x * this.zoom + this.offset.x;
+    const targetY = -this.target.y * this.zoom + this.offset.y;
+    
+    // Applica interpolazione con smoothing
+    this.container.position.x += (targetX - this.container.position.x) * this.smoothing * delta;
+    this.container.position.y += (targetY - this.container.position.y) * this.smoothing * delta;
+
+    // Aggiornamento zoom
+    this.container.scale.set(this.zoom);
+  }
+
+  updateZoom(playerCount, playerSize) {
+    // Base zoom basato sul conteggio giocatori
+    let targetZoom = Math.max(this.minZoom, 1 - (playerCount - 1) * 0.05);
+    
+    // Adatta zoom in base alla dimensione del giocatore
+    const sizeFactorZoom = Math.max(this.minZoom, 1 - (playerSize - 30) / 200);
+    targetZoom = Math.min(targetZoom, sizeFactorZoom);
+    
+    // Limita zoom
+    targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, targetZoom));
+    
+    // Interpolazione zoom
+    this.zoom += (targetZoom - this.zoom) * 0.05;
+  }
+  
+  updateAdvancedZoom(players, localPlayer) {
+    if (players.length < 2) {
+      // Se c'è solo il giocatore locale, usa lo zoom semplice
+      this.updateZoom(1, localPlayer.size);
+      return;
+    }
+    
+    // Calcola i bounds di tutti i giocatori
+    const bounds = this.calculatePlayersBounds(players);
+    
+    // Calcola zoom ottimale basato sulla distribuzione giocatori
+    const optimalZoom = this.calculateOptimalZoom(bounds);
+    
+    // Aggiorna lo zoom con interpolazione
+    this.zoom += (optimalZoom - this.zoom) * 0.05;
+  }
+  
+  calculateOptimalZoom(bounds) {
+    // Calcola area visibile
+    const screenWidth = this.app.screen.width;
+    const screenHeight = this.app.screen.height;
+    
+    // Calcola aspect ratio
+    const screenRatio = screenWidth / screenHeight;
+    const boundsRatio = bounds.width / bounds.height;
+    
+    // Calcola zoom ottimale
+    let zoom;
+    if (boundsRatio > screenRatio) {
+      // Limita per larghezza
+      zoom = screenWidth / (bounds.width + WORLD_CONFIG.padding * 2);
+    } else {
+      // Limita per altezza
+      zoom = screenHeight / (bounds.height + WORLD_CONFIG.padding * 2);
+    }
+    
+    // Limita zoom
+    return Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+  }
+  
+  calculatePlayersBounds(players) {
+    if (!players || players.length === 0) {
+      return { x: 0, y: 0, width: 100, height: 100 };
+    }
+    
+    // Inizializza con il primo giocatore
+    let minX = players[0].x;
+    let maxX = players[0].x;
+    let minY = players[0].y;
+    let maxY = players[0].y;
+    
+    // Trova min/max per tutti i giocatori
+    players.forEach(player => {
+      minX = Math.min(minX, player.x);
+      maxX = Math.max(maxX, player.x);
+      minY = Math.min(minY, player.y);
+      maxY = Math.max(maxY, player.y);
+    });
+    
+    // Calcola larghezza e altezza
+    const width = maxX - minX + 100; // Aggiungi padding
+    const height = maxY - minY + 100;
+    
+    return { x: minX, y: minY, width, height };
+  }
+
+  getVisibleBounds() {
+    // Calcola il rettangolo visibile nella viewport
+    const visibleWidth = this.app.screen.width / this.zoom;
+    const visibleHeight = this.app.screen.height / this.zoom;
+    
+    // Calcola coordinate mondo
+    const worldX = -this.container.position.x / this.zoom;
+    const worldY = -this.container.position.y / this.zoom;
+    
+    return {
+      x: worldX,
+      y: worldY,
+      width: visibleWidth,
+      height: visibleHeight,
+      contains: function(x, y) {
+        return x >= this.x && x <= this.x + this.width &&
+               y >= this.y && y <= this.y + this.height;
+      }
+    };
+  }
+
+  debugDraw() {
+    // Crea grafica debug per visualizzare:
+    // - Centro mondo
+    // - Bordi visibili
+    // - Grid
+    
+    const debug = new PIXI.Container();
+    
+    // Centro mondo
+    const center = new PIXI.Graphics();
+    center.lineStyle(2, 0xFF0000);
+    center.drawCircle(this.worldWidth/2, this.worldHeight/2, 50);
+    center.moveTo(this.worldWidth/2 - 70, this.worldHeight/2);
+    center.lineTo(this.worldWidth/2 + 70, this.worldHeight/2);
+    center.moveTo(this.worldWidth/2, this.worldHeight/2 - 70);
+    center.lineTo(this.worldWidth/2, this.worldHeight/2 + 70);
+    
+    // Bordi mondo
+    const bounds = new PIXI.Graphics();
+    bounds.lineStyle(3, 0x00FF00);
+    bounds.drawRect(0, 0, this.worldWidth, this.worldHeight);
+    
+    // Grid
+    const grid = new PIXI.Graphics();
+    grid.lineStyle(1, 0x333333, 0.3);
+    
+    const gridSize = 200;
+    for (let x = 0; x <= this.worldWidth; x += gridSize) {
+      grid.moveTo(x, 0);
+      grid.lineTo(x, this.worldHeight);
+    }
+    
+    for (let y = 0; y <= this.worldHeight; y += gridSize) {
+      grid.moveTo(0, y);
+      grid.lineTo(this.worldWidth, y);
+    }
+    
+    debug.addChild(grid);
+    debug.addChild(bounds);
+    debug.addChild(center);
+    
+    this.container.addChild(debug);
+    
+    return debug;
+  }
+}
+
+// Sistema di energy points migliorato
+class EnergySystem {
+  constructor(container) {
+    this.points = new Map();
+    this.container = container;
+    this.animations = [];
+  }
+  
+  init(count = MAX_ENERGY_POINTS) {
+    this.clear();
+    
+    // Crea nuovi energy points
+    console.log(`Inizializzazione ${count} punti energia`);
+    for (let i = 0; i < count; i++) {
+      const x = Math.random() * WORLD_CONFIG.width;
+      const y = Math.random() * WORLD_CONFIG.height;
+      this.spawn(i, x, y);
+    }
+  }
+  
+  clear() {
+    // Rimuovi tutti i punti esistenti
+    this.points.forEach(point => {
+      if (point.sprite && point.sprite.parent) {
+        point.sprite.parent.removeChild(point.sprite);
+      }
+    });
+    
+    this.points.clear();
+    
+    if (this.container) {
+      this.container.removeChildren();
+    }
+  }
+  
+  spawn(id, x, y, value = ENERGY_VALUE) {
+    // Crea sprite con texture o grafica fallback
+    let texture;
+    if (PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
+      texture = PIXI.Loader.shared.resources.energy.texture;
+    } else {
+      // Crea grafica fallback
+      const graphics = new PIXI.Graphics();
+      graphics.beginFill(0xf1c40f);
+      graphics.drawCircle(0, 0, 15);
+      graphics.endFill();
+      texture = app.renderer.generateTexture(graphics);
+    }
+    
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.x = x;
+    sprite.y = y;
+    sprite.width = 20;
+    sprite.height = 20;
+    
+    // Aggiungi effetto glow
+    if (PIXI.filters.GlowFilter) {
+      const glowFilter = new PIXI.filters.GlowFilter({
+        distance: 15,
+        outerStrength: 2,
+        innerStrength: 1,
+        color: 0xf1c40f
+      });
+      sprite.filters = [glowFilter];
+    }
+    
+    // Animazione
+    sprite.rotation = Math.random() * Math.PI * 2;
+    
+    // Aggiungi al container
+    if (this.container) {
+      this.container.addChild(sprite);
+    }
+    
+    // Crea point object
+    const point = {
+      id,
+      x,
+      y,
+      value,
+      sprite
+    };
+    
+    // Salva nel map
+    this.points.set(id, point);
+    
+    console.log(`Energy point ${id} creato a ${x},${y}`);
+    return point;
+  }
+  
+  remove(id) {
+    const point = this.points.get(id);
+    if (point && point.sprite) {
+      if (point.sprite.parent) {
+        point.sprite.parent.removeChild(point.sprite);
+      }
+      this.points.delete(id);
+      return true;
+    }
+    return false;
+  }
+  
+  update(delta) {
+    // Aggiorna animazioni
+    this.points.forEach(point => {
+      if (point.sprite) {
+        point.sprite.rotation += 0.01 * delta;
+        
+        // Animazione pulsante
+        const time = Date.now() / 1000;
+        const scale = 0.9 + Math.sin(time * 2) * 0.1;
+        point.sprite.scale.set(scale, scale);
+      }
+    });
+  }
+  
+  getVisiblePoints(visibleBounds) {
+    const result = [];
+    this.points.forEach(point => {
+      if (visibleBounds.contains(point.x, point.y)) {
+        result.push(point);
+      }
+    });
+    return result;
+  }
+}
+
+// DebugPanel - Monitor performance e debug
+class DebugPanel {
+  constructor(app) {
+    this.app = app;
+    this.panel = new PIXI.Container();
+    this.text = new PIXI.Text('Debug Info', {
+      fontFamily: 'Arial',
+      fontSize: 14,
+      fill: 0xffffff,
+      align: 'left'
+    });
+    this.panel.addChild(this.text);
+    this.panel.position.set(10, 10);
+    
+    // Stats
+    this.stats = {
+      fps: 0,
+      playerPos: "N/A",
+      entitiesCount: 0,
+      webSocketStatus: "N/A",
+      renderTime: 0,
+      updateTime: 0,
+      memory: 0
+    };
+    
+    // Mostra pannello
+    app.stage.addChild(this.panel);
+    
+    // Interval per memoria
+    this.memoryInterval = setInterval(() => {
+      if (window.performance && window.performance.memory) {
+        this.stats.memory = window.performance.memory.usedJSHeapSize / (1024 * 1024);
+      }
+    }, 2000);
+  }
+  
+  update(stats) {
+    Object.assign(this.stats, stats);
+    
+    this.text.text = [
+      `FPS: ${this.stats.fps.toFixed(1)}`,
+      `Player: ${this.stats.playerPos}`,
+      `Entities: ${this.stats.entitiesCount}`,
+      `WebSocket: ${this.stats.webSocketStatus}`,
+      `Render: ${this.stats.renderTime.toFixed(2)}ms`,
+      `Update: ${this.stats.updateTime.toFixed(2)}ms`,
+      `Memory: ${this.stats.memory.toFixed(1)}MB`
+    ].join('\n');
+  }
+  
+  setVisible(visible) {
+    this.panel.visible = visible;
+  }
+  
+  destroy() {
+    if (this.memoryInterval) {
+      clearInterval(this.memoryInterval);
+    }
+    
+    if (this.panel.parent) {
+      this.panel.parent.removeChild(this.panel);
+    }
+  }
+}
+
+// NetworkManager - Gestione connessione con validazione
+class NetworkManager {
+  constructor(url) {
+    this.url = url;
+    this.socket = null;
+    this.queue = [];
+    this.connected = false;
+    this.lastPing = 0;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.pingInterval = null;
+    this.processInterval = null;
+    this.handlers = {};
+    this.lastSent = {};
+  }
+  
+  connect() {
+    console.log(`Connessione a ${this.url}`);
+    
+    try {
+      this.socket = new WebSocket(this.url);
+      
+      this.socket.onopen = () => {
+        console.log('WebSocket connesso');
+        this.connected = true;
+        this.reconnectAttempts = 0;
+        this.lastPing = Date.now();
+        
+        // Setup ping
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+        }
+        
+        this.pingInterval = setInterval(() => {
+          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.send({ type: 'ping' });
+          }
+        }, 30000);
+        
+        // Setup processing queue
+        if (this.processInterval) {
+          clearInterval(this.processInterval);
+        }
+        
+        this.processInterval = setInterval(() => {
+          this.processQueue();
+        }, 50); // 20fps
+        
+        // Trigger handler
+        if (this.handlers.onConnect) {
+          this.handlers.onConnect();
+        }
+      };
+      
+      this.socket.onclose = () => {
+        console.log('WebSocket disconnesso');
+        this.connected = false;
+        
+        // Clear intervals
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+        }
+        
+        if (this.processInterval) {
+          clearInterval(this.processInterval);
+          this.processInterval = null;
+        }
+        
+        // Reconnect
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          setTimeout(() => {
+            this.reconnectAttempts++;
+            this.connect();
+          }, 3000 * Math.min(this.reconnectAttempts, 3));
+        } else {
+          console.error('Troppe reconnessioni fallite');
+          
+          // Trigger handler
+          if (this.handlers.onMaxReconnect) {
+            this.handlers.onMaxReconnect();
+          }
+        }
+        
+        // Trigger handler
+        if (this.handlers.onDisconnect) {
+          this.handlers.onDisconnect();
+        }
+      };
+      
+      this.socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        
+        // Trigger handler
+        if (this.handlers.onError) {
+          this.handlers.onError(error);
+        }
+      };
+      
+      this.socket.onmessage = (event) => {
+        this.lastPing = Date.now();
+        
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Validazione base
+          if (!data || !data.type) {
+            console.warn('Messaggio invalido ricevuto:', data);
+            return;
+          }
+          
+          // Aggiungi alla coda per processing
+          this.queue.push(data);
+          
+          // Process specific types immediatamente
+          if (data.type === 'error') {
+            if (this.handlers.onError) {
+              this.handlers.onError(data);
+            }
+          }
+        } catch (err) {
+          console.error('Errore parsing messaggio:', err);
+        }
+      };
+      
+    } catch (error) {
+      console.error('Errore creazione WebSocket:', error);
+      
+      // Trigger handler
+      if (this.handlers.onError) {
+        this.handlers.onError(error);
+      }
+    }
+  }
+  
+  on(event, handler) {
+    this.handlers[event] = handler;
+  }
+  
+  send(data) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.warn('Tentativo di invio con WebSocket chiuso');
+      return false;
+    }
+    
+    try {
+      // Throttling - previeni spam di messaggi
+      if (data.type && data.type === 'move') {
+        const now = Date.now();
+        const lastTime = this.lastSent[data.type] || 0;
+        
+        // Max 10 move messaggi/secondo
+        if (now - lastTime < 100) {
+          return false;
+        }
+        
+        this.lastSent[data.type] = now;
+      }
+      
+      this.socket.send(JSON.stringify(data));
+      return true;
+    } catch (error) {
+      console.error('Errore invio messaggio:', error);
+      return false;
+    }
+  }
+  
+  processQueue() {
+    const maxProcessPerFrame = 5;
+    const processed = [];
+    
+    // Processa fino a maxProcessPerFrame messaggi
+    while (this.queue.length > 0 && processed.length < maxProcessPerFrame) {
+      const data = this.queue.shift();
+      processed.push(data);
+      
+      // Trigger handler
+      const handler = this.handlers[`on${data.type.charAt(0).toUpperCase() + data.type.slice(1)}`];
+      if (handler) {
+        handler(data);
+      }
+    }
+    
+    return processed.length;
+  }
+  
+  isConnected() {
+    return this.connected && this.socket && this.socket.readyState === WebSocket.OPEN;
+  }
+  
+  getStatus() {
+    if (!this.socket) return 'Closed';
+    
+    const states = ['Connecting', 'Open', 'Closing', 'Closed'];
+    return states[this.socket.readyState];
+  }
+  
+  disconnect() {
+    if (this.socket) {
+      this.socket.close();
+    }
+    
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    
+    if (this.processInterval) {
+      clearInterval(this.processInterval);
+      this.processInterval = null;
+    }
+    
+    this.connected = false;
+  }
+}
+
+// Chunk Manager per ottimizzazione rendering
+class ChunkManager {
+  constructor(worldWidth, worldHeight, chunkSize = 800) {
+    this.worldWidth = worldWidth;
+    this.worldHeight = worldHeight;
+    this.chunkSize = chunkSize;
+    this.visibleChunks = new Set();
+    this.chunks = new Map();
+    
+    // Calcola numero di chunks
+    this.cols = Math.ceil(worldWidth / chunkSize);
+    this.rows = Math.ceil(worldHeight / chunkSize);
+    
+    console.log(`ChunkManager: ${this.cols}x${this.rows} chunks (${this.chunkSize}px)`);
+  }
+  
+  getChunkKey(x, y) {
+    const chunkX = Math.floor(x / this.chunkSize);
+    const chunkY = Math.floor(y / this.chunkSize);
+    return `${chunkX},${chunkY}`;
+  }
+  
+  getChunkBounds(key) {
+    const [chunkX, chunkY] = key.split(',').map(Number);
+    return {
+      x: chunkX * this.chunkSize,
+      y: chunkY * this.chunkSize,
+      width: this.chunkSize,
+      height: this.chunkSize
+    };
+  }
+  
+  updateVisibility(visibleBounds) {
+    // Resetta chunks visibili
+    this.visibleChunks.clear();
+    
+    // Calcola range chunk visibili
+    const startX = Math.floor(visibleBounds.x / this.chunkSize);
+    const startY = Math.floor(visibleBounds.y / this.chunkSize);
+    const endX = Math.ceil((visibleBounds.x + visibleBounds.width) / this.chunkSize);
+    const endY = Math.ceil((visibleBounds.y + visibleBounds.height) / this.chunkSize);
+    
+    // Aggiungi chunks visibili
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) {
+          this.visibleChunks.add(`${x},${y}`);
+        }
+      }
+    }
+    
+    return this.visibleChunks;
+  }
+  
+  isChunkVisible(key) {
+    return this.visibleChunks.has(key);
+  }
+  
+  isPositionVisible(x, y) {
+    return this.isChunkVisible(this.getChunkKey(x, y));
+  }
+  
+  debugDraw(container) {
+    const debug = new PIXI.Graphics();
+    debug.lineStyle(1, 0xFF00FF, 0.5);
+    
+    // Disegna grid di chunks
+    for (let x = 0; x <= this.worldWidth; x += this.chunkSize) {
+      debug.moveTo(x, 0);
+      debug.lineTo(x, this.worldHeight);
+    }
+    
+    for (let y = 0; y <= this.worldHeight; y += this.chunkSize) {
+      debug.moveTo(0, y);
+      debug.lineTo(this.worldWidth, y);
+    }
+    
+    container.addChild(debug);
+    
+    return debug;
+  }
+}
+
+// Migliora l'inizializzazione del gioco
+async function initGame() {
+  try {
+    // Inizializza PixiJS se non è già inizializzato
+    if (!app) {
+      await initPixiJS();
+    }
+    
+    console.log('Inizializzazione gioco avanzata...');
+    
+    // Carica texture
+    await loadGameTextures();
+    
+    // Inizializza oggetti gioco
+    setupGameState();
+    
+    // Inizializza camera avanzata
+    const camera = new CameraSystem(app, WORLD_CONFIG.width, WORLD_CONFIG.height);
+    gameState.camera = camera;
+    
+    // Debug panel
+    const debugPanel = new DebugPanel(app);
+    gameState.debugPanel = debugPanel;
+    
+    // Chunk manager
+    const chunkManager = new ChunkManager(WORLD_CONFIG.width, WORLD_CONFIG.height);
+    gameState.chunkManager = chunkManager;
+    
+    // Crea container per tipo
+    gameState.containers = {
+      energy: new PIXI.Container(),
+      players: new PIXI.Container(),
+      effects: new PIXI.Container(),
+      debug: new PIXI.Container()
+    };
+    
+    // Aggiungi container alla camera
+    Object.values(gameState.containers).forEach(container => {
+      camera.container.addChild(container);
+    });
+    
+    // Energy system
+    const energySystem = new EnergySystem(gameState.containers.energy);
+    gameState.energySystem = energySystem;
+    energySystem.init(MAX_ENERGY_POINTS);
+    
+    // Network manager
+    const networkManager = new NetworkManager(WS_URL);
+    gameState.network = networkManager;
+    
+    // Setup handlers
+    setupNetworkHandlers(networkManager);
+    
+    // Debug visuals
+    if (gameState.debug) {
+      camera.debugDraw();
+      chunkManager.debugDraw(gameState.containers.debug);
+    }
+    
+    // Connect to server
+    networkManager.connect();
+    
+    // Setup controls
+    setupControls();
+    
+    // Followa il giocatore locale
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (localPlayer) {
+      camera.follow(localPlayer);
+    }
+    
+    // Inizia game loop
+    if (!app.ticker.started) {
+      app.ticker.add(gameLoop);
+      console.log('Game loop avviato');
+    }
+    
+    console.log('Gioco inizializzato con sistema avanzato');
+  } catch (error) {
+    console.error('Errore inizializzazione gioco:', error);
+    showMessage('Errore inizializzazione gioco. Ricarica la pagina.', 'error');
+  }
+}
+
+// Setup network handlers
+function setupNetworkHandlers(network) {
+  network.on('onConnect', () => {
+    console.log('Connesso al server');
+    showMessage('Connesso al server', 'success');
+    
+    // Invia join
+    const localPlayer = gameState.players.get(gameState.playerId);
+    if (localPlayer) {
+      network.send({
+        type: 'join',
+        id: gameState.playerId,
+        name: localPlayer.name || 'Tu',
+        x: localPlayer.x,
+        y: localPlayer.y,
+        size: localPlayer.size,
+        color: localPlayer.color
+      });
+    }
+  });
+  
+  network.on('onDisconnect', () => {
+    showMessage('Disconnesso dal server. Riconnessione...', 'error');
+  });
+  
+  network.on('onMaxReconnect', () => {
+    showMessage('Impossibile connettersi al server. Ricarica la pagina.', 'error');
+  });
+  
+  network.on('onError', (error) => {
+    console.error('WebSocket error:', error);
+    showMessage(error.message || 'Errore connessione', 'error');
+  });
+  
+  network.on('onState', (data) => {
+    handleStateUpdate(data);
+  });
+  
+  network.on('onJoin', (data) => {
+    handlePlayerJoin(data);
+  });
+  
+  network.on('onMove', (data) => {
+    handlePlayerMove(data);
+  });
+  
+  network.on('onLeave', (data) => {
+    handlePlayerLeave(data);
+  });
+}
+
+// Game loop migliorato
+function gameLoop(delta) {
+  try {
+    const updateStart = performance.now();
+    
+    // Verifica stato inizializzazione
+    if (!gameState || !gameState.camera) {
+      return;
+    }
+    
+    // Ottimizzazione: update solo se gioco attivo 
+    if (document.hidden) {
+      return;
+    }
+    
+    // Aggiorna movimento giocatore
+    updateMovement(delta);
+    
+    // Aggiorna energy points
+    if (gameState.energySystem) {
+      gameState.energySystem.update(delta);
+    }
+    
+    // Update network
+    if (gameState.network && gameState.network.isConnected()) {
+      gameState.network.processQueue();
+    }
+    
+    // Aggiorna camera
+    if (gameState.camera) {
+      gameState.camera.update(delta);
+      
+      // Aggiorna visibilità
+      if (gameState.chunkManager) {
+        const visibleBounds = gameState.camera.getVisibleBounds();
+        gameState.chunkManager.updateVisibility(visibleBounds);
+      }
+    }
+    
+    // Ottimizzazione: applica visibilità
+    optimizeVisibility();
+    
+    // Controlla collisioni
+    checkEnergyCollisions();
+    checkPlayerCollisions();
+    
+    // Interolate altri giocatori
+    if (typeof interpolateOtherPlayers === 'function') {
+      interpolateOtherPlayers(delta);
+    }
+    
+    // Aggiorna debug panel
+    if (gameState.debugPanel) {
+      const renderTime = performance.now() - updateStart;
+      
+      const localPlayer = gameState.players.get(gameState.playerId);
+      const playerPos = localPlayer ? 
+        `${Math.round(localPlayer.x)},${Math.round(localPlayer.y)}` : 'N/A';
+      
+      gameState.debugPanel.update({
+        fps: app.ticker.FPS,
+        playerPos: playerPos,
+        entitiesCount: (gameState.players ? gameState.players.size : 0) + 
+                       (gameState.energySystem ? gameState.energySystem.points.size : 0),
+        webSocketStatus: gameState.network ? gameState.network.getStatus() : 'N/A',
+        renderTime: renderTime,
+        updateTime: renderTime
+      });
+    }
+  } catch (error) {
+    console.error('Error in game loop:', error);
+  }
+}
+
+// Optimization: applica visibilità in base a chunks
+function optimizeVisibility() {
+  if (!gameState.chunkManager) return;
+  
+  // Ottimizza energy points
+  if (gameState.energySystem && gameState.energySystem.points) {
+    gameState.energySystem.points.forEach(point => {
+      if (point.sprite) {
+        point.sprite.visible = gameState.chunkManager.isPositionVisible(point.x, point.y);
+      }
+    });
+  }
+  
+  // Ottimizza players
+  if (gameState.players) {
+    gameState.players.forEach(player => {
+      // Giocatore locale sempre visibile
+      if (player.id === gameState.playerId) {
+        if (player.sprite) player.sprite.visible = true;
+        return;
+      }
+      
+      // Altri players: visibili solo se nel chunk visibile
+      if (player.sprite) {
+        player.sprite.visible = gameState.chunkManager.isPositionVisible(player.x, player.y);
+      }
+    });
+  }
+}
+
+// ... existing code ...
