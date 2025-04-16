@@ -408,12 +408,18 @@
 
     <div id="fps-counter">FPS: 60</div>
 
+    <script src="patch.js"></script>
     <script src="app.js"></script>
     <script>
         document.getElementById('play-button').addEventListener('click', () => {
             const username = document.getElementById('username-input').value.trim();
             if (username) {
-                initGame(username);
+                if (typeof initGame === 'function') {
+                    initGame(username);
+                } else {
+                    alert('Errore: Il gioco non è stato caricato correttamente. Ricarica la pagina o controlla la console per errori.');
+                    console.error('La funzione initGame non è definita. Verificare app.js');
+                }
             } else {
                 alert('Per favore inserisci un nome');
             }
