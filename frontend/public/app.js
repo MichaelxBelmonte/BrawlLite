@@ -2872,7 +2872,8 @@ function spawnEnergyPoint() {
         y: 1.2,
         duration: 0.8,
         repeat: -1,
-        yoyo: true
+        yoyo: true,
+        ease: "sine.inOut"
     });
     
     return container;
@@ -3945,10 +3946,6 @@ function createParticleEffect(x, y, color, count) {
 // Funzione per aggiornare la camera
   
   console.log("Gioco inizializzato con successo");
-// Initialize game when document is ready
-document.addEventListener('DOMContentLoaded', () => {
-    initGame();
-});
 
 // Funzione per aggiornare la camera
 function updateCamera(delta) {
@@ -6759,68 +6756,48 @@ class AssetManager {
   
   // Crea texture di fallback se il caricamento fallisce
   _createFallbackTextures() {
-    if (this.fallbackCreated) return;
-    
-    console.log('Creazione texture fallback');
-    
+    console.log("Creazione texture fallback");
     try {
-      // Crea grafica per player
-      const playerGraphics = new PIXI.Graphics();
-      playerGraphics.beginFill(0x3498db);
-      playerGraphics.drawCircle(0, 0, 25);
-      playerGraphics.endFill();
-      
-      // Crea grafica per energy
-      const energyGraphics = new PIXI.Graphics();
-      energyGraphics.beginFill(0xf1c40f);
-      energyGraphics.drawCircle(0, 0, 15);
-      energyGraphics.endFill();
-      
-      // Crea grafica per shield
-      const shieldGraphics = new PIXI.Graphics();
-      shieldGraphics.beginFill(0x2ecc71);
-      shieldGraphics.drawCircle(0, 0, 30);
-      shieldGraphics.endFill();
-      
-      // Crea grafica per attack
-      const attackGraphics = new PIXI.Graphics();
-      attackGraphics.beginFill(0xe74c3c);
-      attackGraphics.drawCircle(0, 0, 20);
-      attackGraphics.endFill();
-      
-      // Crea grafica per speed
-      const speedGraphics = new PIXI.Graphics();
-      speedGraphics.beginFill(0x9b59b6);
-      speedGraphics.drawCircle(0, 0, 20);
-      speedGraphics.endFill();
-      
-      // Genera texture dalle grafiche
-      this.textures = {
-        player: app.renderer.generateTexture(playerGraphics),
-        energy: app.renderer.generateTexture(energyGraphics),
-        shield: app.renderer.generateTexture(shieldGraphics),
-        attack: app.renderer.generateTexture(attackGraphics),
-        speed: app.renderer.generateTexture(speedGraphics)
-      };
-      
-      // CompatibilitÃ  con vecchio loader
-      PIXI.Loader = PIXI.Loader || {};
-      PIXI.Loader.shared = {
-        resources: {
-          player: { texture: this.textures.player },
-          energy: { texture: this.textures.energy },
-          shield: { texture: this.textures.shield },
-          attack: { texture: this.textures.attack },
-          speed: { texture: this.textures.speed }
+        // Verifica se PIXI è disponibile
+        if (!window.PIXI) {
+            console.warn("PIXI non disponibile per fallback");
+            this.textures = { player: { width: 20, height: 20 }, energy: { width: 10, height: 10 } };
+            return;
         }
-      };
-      
-      this.fallbackCreated = true;
-      console.log('Texture fallback create con successo');
+
+        // Verifica se app e renderer sono disponibili
+        const renderer = window.app ? window.app.renderer : null;
+        if (!renderer) {
+            console.warn("Renderer non disponibile per fallback, creo grafica semplice");
+            this.textures = { player: { width: 20, height: 20 }, energy: { width: 10, height: 10 } };
+            return;
+        }
+
+        // Crea grafica fallback per il giocatore (cerchio bianco)
+        const playerGraphics = new PIXI.Graphics();
+        playerGraphics.beginFill(0xffffff);
+        playerGraphics.drawCircle(0, 0, 15); // Dimensione base
+        playerGraphics.endFill();
+        this.textures.player = renderer.generateTexture(playerGraphics);
+
+        // Crea grafica fallback per l'energia (cerchio giallo)
+        const energyGraphics = new PIXI.Graphics();
+        energyGraphics.beginFill(0xf1c40f);
+        energyGraphics.drawCircle(0, 0, 10); // Dimensione base
+        energyGraphics.endFill();
+        this.textures.energy = renderer.generateTexture(energyGraphics);
+
+        console.log("Texture fallback create con successo");
+
     } catch (error) {
-      console.error('Errore critico creazione texture fallback:', error);
+        console.error("Errore critico creazione texture fallback:", error);
+        // Imposta textures placeholder per evitare errori successivi
+        this.textures = {
+            player: { width: 20, height: 20 },
+            energy: { width: 10, height: 10 }
+        };
     }
-  }
+}
   
   // Ottiene una texture per nome
   getTexture(name) {
@@ -7280,7 +7257,7 @@ window.initGame = async function initGame(username) {
     connectWebSocket();
     
     // Inizializza camera
-    initCamera();
+    //initCamera();
     
     // Inizializza sistema energia
     initEnergySystem();
