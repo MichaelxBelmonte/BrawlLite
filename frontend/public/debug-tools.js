@@ -3,41 +3,63 @@
  * Strumenti per diagnosticare e risolvere problemi di rendering
  */
 
+// Variabili per riferimenti agli oggetti di gioco
+let _app = null;
+let _gameState = null;
+let _PIXI = null;
+
+// Funzione per inizializzare il debugger con riferimenti corretti
+window.initBrawlDebugger = function(appRef, gameStateRef, pixiRef) {
+  console.log('Debugger inizializzato con riferimenti esterni');
+  _app = appRef;
+  _gameState = gameStateRef;
+  _PIXI = pixiRef || window.PIXI;
+  
+  // Inizializza gli strumenti di debug dopo aver ricevuto i riferimenti
+  initDebugTools();
+  
+  return {
+    diagnosi: debugBrawlLite,
+    ricreaContainers: recreateContainers,
+    fixEnergy: fixEnergyPoints
+  };
+};
+
 // Funzione principale di diagnosi
 function debugBrawlLite() {
   console.log('===== DIAGNOSI BRAWLLITE =====');
   
   // Controlla app PixiJS
-  if (window.app) {
+  if (_app) {
     console.log('✅ app PixiJS trovata');
-    console.log('- Tipo renderer:', app.renderer.type === 0 ? 'WebGL' : 'Canvas');
-    console.log('- Dimensioni:', app.screen.width, 'x', app.screen.height);
-    console.log('- Children in stage:', app.stage.children.length);
+    console.log('- Tipo renderer:', _app.renderer.type === 0 ? 'WebGL' : 'Canvas');
+    console.log('- Dimensioni:', _app.screen.width, 'x', _app.screen.height);
+    console.log('- Children in stage:', _app.stage.children.length);
   } else {
     console.error('❌ app PixiJS non trovata');
   }
   
   // Controlla gameState
-  if (window.gameState) {
+  if (_gameState) {
     console.log('✅ gameState trovato');
-    console.log('- Players:', gameState.players ? gameState.players.size : 0);
-    console.log('- EnergyPoints:', gameState.energyPoints ? gameState.energyPoints.size : 0);
+    console.log('- Players:', _gameState.players ? _gameState.players.size : 0);
+    console.log('- EnergyPoints:', _gameState.energyPoints ? _gameState.energyPoints.size : 0);
     
-    if (gameState.containers) {
+    if (_gameState.containers) {
       console.log('✅ containers trovati');
       
-      if (gameState.containers.energy) {
+      if (_gameState.containers.energy) {
         console.log('✅ energy container trovato');
-        console.log('- visible:', gameState.containers.energy.visible);
-        console.log('- children:', gameState.containers.energy.children.length);
+        console.log('- visible:', _gameState.containers.energy.visible);
+        console.log('- children:', _gameState.containers.energy.children.length);
       } else {
         console.error('❌ energy container non trovato');
       }
       
-      if (gameState.containers.players) {
+      if (_gameState.containers.players) {
         console.log('✅ players container trovato');
-        console.log('- visible:', gameState.containers.players.visible);
-        console.log('- children:', gameState.containers.players.children.length);
+        console.log('- visible:', _gameState.containers.players.visible);
+        console.log('- children:', _gameState.containers.players.children.length);
       } else {
         console.error('❌ players container non trovato');
       }
@@ -49,19 +71,19 @@ function debugBrawlLite() {
   }
   
   // Controlla texture
-  if (window.PIXI) {
+  if (_PIXI) {
     console.log('✅ PIXI trovato');
     
-    if (PIXI.Loader && PIXI.Loader.shared && PIXI.Loader.shared.resources) {
+    if (_PIXI.Loader && _PIXI.Loader.shared && _PIXI.Loader.shared.resources) {
       console.log('✅ Loader risorse trovato');
       
-      if (PIXI.Loader.shared.resources.player && PIXI.Loader.shared.resources.player.texture) {
+      if (_PIXI.Loader.shared.resources.player && _PIXI.Loader.shared.resources.player.texture) {
         console.log('✅ Texture player trovata');
       } else {
         console.error('❌ Texture player non trovata');
       }
       
-      if (PIXI.Loader.shared.resources.energy && PIXI.Loader.shared.resources.energy.texture) {
+      if (_PIXI.Loader.shared.resources.energy && _PIXI.Loader.shared.resources.energy.texture) {
         console.log('✅ Texture energy trovata');
       } else {
         console.error('❌ Texture energy non trovata');
@@ -83,32 +105,32 @@ function debugBrawlLite() {
 function createTestElements() {
   console.log('Creazione elementi test...');
   
-  if (!window.app || !app.stage) {
+  if (!_app || !_app.stage) {
     console.error('❌ Impossibile creare elementi test: app o stage non disponibili');
     return;
   }
   
   // Aggiungi un contenitore di test
-  const testContainer = new PIXI.Container();
-  testContainer.position.set(app.screen.width / 2, app.screen.height / 2);
-  app.stage.addChild(testContainer);
+  const testContainer = new _PIXI.Container();
+  testContainer.position.set(_app.screen.width / 2, _app.screen.height / 2);
+  _app.stage.addChild(testContainer);
   
   // Aggiungi un cerchio rosso come punto di riferimento
-  const reference = new PIXI.Graphics();
+  const reference = new _PIXI.Graphics();
   reference.beginFill(0xff0000);
   reference.drawCircle(0, 0, 10);
   reference.endFill();
   testContainer.addChild(reference);
   
   // Aggiungi un cerchio verde come "energia"
-  const testEnergy = new PIXI.Graphics();
+  const testEnergy = new _PIXI.Graphics();
   testEnergy.beginFill(0x00ff00);
   testEnergy.drawCircle(50, 0, 15);
   testEnergy.endFill();
   testContainer.addChild(testEnergy);
   
   // Aggiungi un cerchio blu come "giocatore"
-  const testPlayer = new PIXI.Graphics();
+  const testPlayer = new _PIXI.Graphics();
   testPlayer.beginFill(0x0000ff);
   testPlayer.drawCircle(-50, 0, 20);
   testPlayer.endFill();
@@ -117,7 +139,7 @@ function createTestElements() {
   console.log('✅ Elementi test creati al centro dello schermo');
   
   // Crea testo informativo
-  const testText = new PIXI.Text('TEST RENDERING', {
+  const testText = new _PIXI.Text('TEST RENDERING', {
     fontFamily: 'Arial',
     fontSize: 16,
     fill: 0xffffff,
@@ -132,7 +154,7 @@ function createTestElements() {
 
 // Funzione per ricreare container e inizializzare nuovi oggetti
 function recreateContainers() {
-  if (!window.app || !window.gameState) {
+  if (!_app || !_gameState) {
     console.error('❌ app o gameState non disponibili');
     return;
   }
@@ -140,8 +162,8 @@ function recreateContainers() {
   console.log('Ricreazione containers...');
   
   // Rimuovi container esistenti
-  if (gameState.containers) {
-    Object.values(gameState.containers).forEach(container => {
+  if (_gameState.containers) {
+    Object.values(_gameState.containers).forEach(container => {
       if (container && container.parent) {
         container.parent.removeChild(container);
       }
@@ -149,48 +171,48 @@ function recreateContainers() {
   }
   
   // Ricrea i container
-  gameState.containers = {
-    energy: new PIXI.Container(),
-    players: new PIXI.Container(),
-    effects: new PIXI.Container(),
-    debug: new PIXI.Container()
+  _gameState.containers = {
+    energy: new _PIXI.Container(),
+    players: new _PIXI.Container(),
+    effects: new _PIXI.Container(),
+    debug: new _PIXI.Container()
   };
   
   // Assicurati che siano visibili
-  Object.values(gameState.containers).forEach(container => {
+  Object.values(_gameState.containers).forEach(container => {
     container.visible = true;
-    app.stage.addChild(container);
+    _app.stage.addChild(container);
   });
   
   console.log('✅ Container ricreati e aggiunti allo stage');
   
   // Ricrea alcuni elementi energia di test
   for (let i = 0; i < 5; i++) {
-    const energy = new PIXI.Graphics();
+    const energy = new _PIXI.Graphics();
     energy.beginFill(0x00ff88);
     energy.drawCircle(0, 0, 10);
     energy.endFill();
     energy.position.set(
-      Math.random() * app.screen.width,
-      Math.random() * app.screen.height
+      Math.random() * _app.screen.width,
+      Math.random() * _app.screen.height
     );
-    gameState.containers.energy.addChild(energy);
+    _gameState.containers.energy.addChild(energy);
   }
   
   // Ricrea un giocatore di test
-  const player = new PIXI.Graphics();
+  const player = new _PIXI.Graphics();
   player.beginFill(0x3498db);
   player.drawCircle(0, 0, 20);
   player.endFill();
-  player.position.set(app.screen.width / 2, app.screen.height / 2);
-  gameState.containers.players.addChild(player);
+  player.position.set(_app.screen.width / 2, _app.screen.height / 2);
+  _gameState.containers.players.addChild(player);
   
   console.log('✅ Oggetti test creati');
 }
 
 // Funzione di ripristino fallback per energy points
 function fixEnergyPoints() {
-  if (!window.app || !window.gameState) {
+  if (!_app || !_gameState) {
     console.error('❌ app o gameState non disponibili');
     return;
   }
@@ -198,35 +220,35 @@ function fixEnergyPoints() {
   console.log('Tentativo di ripristino energy points...');
   
   // Pulisci container energia
-  if (gameState.containers && gameState.containers.energy) {
-    gameState.containers.energy.removeChildren();
+  if (_gameState.containers && _gameState.containers.energy) {
+    _gameState.containers.energy.removeChildren();
   } else {
-    gameState.containers = gameState.containers || {};
-    gameState.containers.energy = new PIXI.Container();
-    app.stage.addChild(gameState.containers.energy);
+    _gameState.containers = _gameState.containers || {};
+    _gameState.containers.energy = new _PIXI.Container();
+    _app.stage.addChild(_gameState.containers.energy);
   }
   
   // Pulisci la mappa energy points
-  if (gameState.energyPoints) {
-    gameState.energyPoints.clear();
+  if (_gameState.energyPoints) {
+    _gameState.energyPoints.clear();
   } else {
-    gameState.energyPoints = new Map();
+    _gameState.energyPoints = new Map();
   }
   
   // Crea nuovi energy points semplici
   const pointsCount = 20;
   for (let i = 0; i < pointsCount; i++) {
-    const graphics = new PIXI.Graphics();
+    const graphics = new _PIXI.Graphics();
     graphics.beginFill(0xf1c40f);
     graphics.drawCircle(0, 0, 10);
     graphics.endFill();
     
-    const x = Math.random() * app.screen.width;
-    const y = Math.random() * app.screen.height;
+    const x = Math.random() * _app.screen.width;
+    const y = Math.random() * _app.screen.height;
     graphics.position.set(x, y);
     
-    gameState.containers.energy.addChild(graphics);
-    gameState.energyPoints.set(i, {
+    _gameState.containers.energy.addChild(graphics);
+    _gameState.energyPoints.set(i, {
       id: i,
       x: x,
       y: y,
@@ -294,8 +316,8 @@ function addDebugButton() {
   toggleButton.textContent = '👁️ Toggle Visibilità';
   toggleButton.style = buttonStyle;
   toggleButton.addEventListener('click', () => {
-    if (window.gameState && gameState.containers) {
-      Object.values(gameState.containers).forEach(container => {
+    if (_gameState && _gameState.containers) {
+      Object.values(_gameState.containers).forEach(container => {
         container.visible = !container.visible;
       });
       console.log('Visibilità containers toggled');
@@ -313,14 +335,154 @@ function initDebugTools() {
   addDebugButton();
 }
 
-// Avvia strumenti di debug all'evento DOMContentLoaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initDebugTools);
-} else {
-  initDebugTools();
+// Creiamo un messaggio di aiuto per il sviluppatore
+console.log('BrawlLite Debugger caricato! Per inizializzare, aggiungi questo codice al tuo app.js:');
+console.log('// Aggiungi alla fine del metodo initGame:');
+console.log('if (window.initBrawlDebugger) {');
+console.log('  window.initBrawlDebugger(app, gameState, PIXI);');
+console.log('}');
+
+// Aggiungi questa funzione dopo l'addEventListener load per migliorare l'auto-rilevamento
+// Prova a cercare le variabili nel DOM
+function findInWindowScope() {
+  // Cerca prima come variabili globali
+  if (window.app) {
+    console.log('app trovato nello scope globale');
+    _app = window.app;
+  }
+  
+  if (window.gameState) {
+    console.log('gameState trovato nello scope globale');
+    _gameState = window.gameState;
+  }
+  
+  if (window.PIXI) {
+    console.log('PIXI trovato nello scope globale');
+    _PIXI = window.PIXI;
+  }
+  
+  // Se ancora non trovati, cerca nei frame
+  if (!_app || !_gameState) {
+    try {
+      // Cerca in iframes
+      for (let i = 0; i < window.frames.length; i++) {
+        const frame = window.frames[i];
+        if (frame.app && !_app) {
+          console.log('app trovato in frame[' + i + ']');
+          _app = frame.app;
+        }
+        if (frame.gameState && !_gameState) {
+          console.log('gameState trovato in frame[' + i + ']');
+          _gameState = frame.gameState;
+        }
+        if (frame.PIXI && !_PIXI) {
+          console.log('PIXI trovato in frame[' + i + ']');
+          _PIXI = frame.PIXI;
+        }
+      }
+    } catch (e) {
+      console.error('Errore cercando nei frame:', e);
+    }
+  }
+  
+  // Cerca utilizzando eval come ultimo tentativo
+  if (!_app) {
+    try {
+      const appScript = document.querySelector('script:not([src])');
+      if (appScript) {
+        const appContent = appScript.textContent;
+        if (appContent && appContent.includes('app = new PIXI.Application')) {
+          console.log('Tentativo di acquisizione app tramite script injection');
+          
+          // Crea una funzione ausiliaria per catturare app
+          const captureScript = document.createElement('script');
+          captureScript.textContent = `
+            window.__debugCaptureApp = function() {
+              if (window.app) {
+                console.log('Catturato app tramite script');
+                window.__capturedApp = app;
+                window.__capturedGameState = gameState;
+                return true;
+              }
+              return false;
+            };
+            // Esegui subito
+            window.__debugCaptureApp();
+            // Esegui anche dopo un breve ritardo
+            setTimeout(window.__debugCaptureApp, 500);
+            setTimeout(window.__debugCaptureApp, 1000);
+          `;
+          document.head.appendChild(captureScript);
+          
+          // Schedule un controllo dopo un breve periodo
+          setTimeout(() => {
+            if (window.__capturedApp) {
+              _app = window.__capturedApp;
+              _gameState = window.__capturedGameState;
+              console.log('Acquisite variabili app e gameState');
+              initDebugTools();
+            }
+          }, 1200);
+        }
+      }
+    } catch (e) {
+      console.error('Errore tentativo script injection:', e);
+    }
+  }
+  
+  // Verifica risultato
+  if (_app && _gameState) {
+    console.log('✅ Acquisiti riferimenti app e gameState - debug pronto');
+    return true;
+  } else {
+    console.error('❌ Non è stato possibile trovare app o gameState');
+    return false;
+  }
 }
 
-// Esponi funzioni a livello globale
-window.debugBrawlLite = debugBrawlLite;
-window.recreateContainers = recreateContainers;
-window.fixEnergyPoints = fixEnergyPoints; 
+// Esegui il finder durante il load
+window.addEventListener('load', function() {
+  console.log('DOM caricato, ricerca app e gameState');
+  // Prova il rilevamento avanzato
+  if (findInWindowScope()) {
+    console.log('Debug inizializzato tramite rilevamento automatico');
+    initDebugTools();
+  } else {
+    // Aggiungi una finestra di aiuto se non trovati automaticamente
+    const helpBox = document.createElement('div');
+    helpBox.style.position = 'fixed';
+    helpBox.style.bottom = '10px';
+    helpBox.style.right = '10px';
+    helpBox.style.backgroundColor = 'rgba(0,0,0,0.8)';
+    helpBox.style.color = '#fff';
+    helpBox.style.padding = '10px';
+    helpBox.style.borderRadius = '5px';
+    helpBox.style.zIndex = '9999';
+    helpBox.style.maxWidth = '300px';
+    helpBox.style.fontSize = '12px';
+    helpBox.innerHTML = `
+      <p><strong>Debug non inizializzato</strong></p>
+      <p>Aggiungi questo codice alla fine di initGame in app.js:</p>
+      <code>if(window.initBrawlDebugger)window.initBrawlDebugger(app,gameState,PIXI);</code>
+      <p>Oppure esegui questo comando nella console:</p>
+      <code>window.initBrawlDebugger(app,gameState,PIXI);</code>
+      <button id="hide-debug-help" style="margin-top:10px;padding:5px;background:#f55;border:none;color:white;border-radius:3px;">Chiudi</button>
+    `;
+    document.body.appendChild(helpBox);
+    
+    document.getElementById('hide-debug-help').addEventListener('click', function() {
+      helpBox.style.display = 'none';
+    });
+  }
+  
+  // Esegui un secondo tentativo dopo un ritardo
+  setTimeout(() => {
+    if (!_app || !_gameState) {
+      console.log('Secondo tentativo di rilevamento...');
+      if (findInWindowScope() && !document.getElementById('debug-panel')) {
+        console.log('Debug inizializzato al secondo tentativo');
+        initDebugTools();
+      }
+    }
+  }, 2000);
+}); 
