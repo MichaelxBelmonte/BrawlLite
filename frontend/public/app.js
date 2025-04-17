@@ -5207,43 +5207,69 @@ function connectWebSocket() {
       console.error('Errore WebSocket:', error);
     };
     
-    socket.onmessage = function(event) {
-      try {
-        // Aggiorna timestamp ultimo messaggio
-        gameState.lastServerMessage = Date.now();
-        
-        const data = JSON.parse(event.data);
-        console.log('Messaggio ricevuto:', data.type);
-        
-        // Gestisci messaggi in base al tipo
-        switch (data.type) {
-          case 'state':
-            handleStateUpdate(data);
-            break;
-          case 'join':
-            handlePlayerJoin(data);
-            break;
-          case 'move':
-            handlePlayerMove(data);
-            break;
-          case 'leave':
-            handlePlayerLeave(data);
-            break;
-          case 'error':
-            console.error('Errore dal server:', data.message);
-            showMessage('Errore: ' + data.message, 'error');
-            break;
-        }
-      } catch (error) {
-        console.error('Errore parsing messaggio WebSocket:', error);
-      }
-    };
-  } catch (error) {
-    console.error('Errore creazione WebSocket:', error);
-    showMessage('Impossibile connettersi al server', 'error');
-  }
-}
-
+          // Rendi la funzione onmessage asincrona per usare await
+          socket.onmessage = async function(event) {
+            try {
+              // Aggiorna timestamp ultimo messaggio
+              gameState.lastServerMessage = Date.now();
+  
+              // const data = JSON.parse(event.data); // RIMOSSO: usiamo msgpack
+              // Dobbiamo usare msgpack per decodificare i dati binari dal server
+              let data;
+              try {
+                // Assicurati che msgpack sia disponibile
+                if (typeof msgpack === 'undefined') {
+                  throw new Error('Libreria msgpack non trovata');
+                }
+                // Converti il Blob/ArrayBuffer in Uint8Array e decodifica
+                let bufferData;
+                if (event.data instanceof Blob) {
+                  bufferData = await event.data.arrayBuffer();
+                } else if (event.data instanceof ArrayBuffer) {
+                  bufferData = event.data;
+                } else if (event.data instanceof Uint8Array) {
+                   bufferData = event.data; // Già Uint8Array
+                } else {
+                   console.warn('Tipo dati WebSocket non riconosciuto:', typeof event.data);
+                   bufferData = event.data; // Prova comunque
+                }
+                data = msgpack.decode(new Uint8Array(bufferData));
+              } catch (decodeError) {
+                console.error('Errore decodifica msgpack:', decodeError, 'Dati ricevuti:', event.data);
+                return; // Interrompi se non possiamo decodificare
+              }
+  
+              console.log('Messaggio decodificato ricevuto:', data ? data.type : 'N/D', data);
+  
+              // Gestisci messaggi in base al tipo
+              switch (data.type) {
+                case 'state':
+                  handleStateUpdate(data);
+                  break;
+                case 'join':
+                  handlePlayerJoin(data);
+                  break;
+                case 'move':
+                  handlePlayerMove(data);
+                  break;
+                case 'leave':
+                  handlePlayerLeave(data);
+                  break;
+                case 'error':
+                  console.error('Errore dal server:', data.message);
+                  showMessage('Errore: ' + data.message, 'error');
+                  break;
+              }
+            } catch (error) {
+              console.error('Errore parsing messaggio WebSocket:', error);
+            }
+          };
+        } catch (error) { // Questo è il blocco catch per il try principale iniziato a riga 5129
+          console.error('Errore creazione WebSocket:', error);
+          showMessage('Impossibile connettersi al server', 'error');
+        } // <-- Ecco la parentesi che devi aggiungere
+    } // Questa è la chiusura della funzione connectWebSocket
+    
 // Miglioramento game loop principale
 function gameLoop(delta) {
   // Verifica che il gioco sia inizializzato
@@ -7305,9 +7331,6 @@ window.initGame = async function initGame(username) {
     // Connetti al WebSocket
     connectWebSocket();
     
-    // Inizializza controlli mobile
-    initMobileControls();
-    
     // Gestisci orientamento dispositivo
     handleDeviceOrientation();
     
@@ -7319,7 +7342,3 @@ window.initGame = async function initGame(username) {
     return false;
   }
 }
-
-// Sostituisci la seconda dichiarazione di EnergySystem con questo commento
-// La classe EnergySystem Ã¨ giÃ  definita sopra alla linea 5462
-// ... existing code ...
