@@ -1976,48 +1976,75 @@ function connectWebSocket() {
         reconnectAttempts = 0;
     };
     
-    socket.onmessage = (event) => {
+    socket.onmessage = async function(event) { 
+      try {
+        // Aggiorna timestamp ultimo messaggio
+        gameState.lastServerMessage = Date.now();
+        
+        // const data = JSON.parse(event.data); // RIMOSSO: usiamo msgpack
+        // Dobbiamo usare msgpack per decodificare i dati binari dal server
+        let data;
         try {
-            const data = msgpack.decode(new Uint8Array(event.data));
-            
-            // Aggiorna il timestamp dell'ultimo messaggio ricevuto
-            gameState.lastServerMessage = Date.now();
-            
-            switch(data.type) {
-                case 'state':
-                    handleStateUpdate(data);
-                    break;
-                    
-                case 'join':
-                    handlePlayerJoin(data);
-                    break;
-                    
-                case 'move':
-                    handlePlayerMove(data);
-                    break;
-                    
-                case 'leave':
-                    handlePlayerLeave(data);
-                    break;
-                    
-                case 'error':
-                    console.error('Errore dal server:', data.message);
-                    showMessage('Errore: ' + data.message, 'warning');
-                    break;
-                    
-                case 'pong':
-                    // Calcola la latenza
-                    if (data.timestamp) {
-                        const latency = Date.now() - data.timestamp;
-                        gameState.latency = latency;
-                        // Solo per debug
-                        // console.log(`Latenza: ${latency}ms`);
-                    }
-                    break;
-            }
-        } catch (error) {
-            console.error('Errore nel parsing del messaggio:', error);
+          // Assicurati che msgpack sia disponibile
+          if (typeof msgpack === 'undefined') {
+            throw new Error('Libreria msgpack non trovata');
+          }
+          // Converti il Blob/ArrayBuffer in Uint8Array e decodifica
+          // Verifica il tipo di event.data prima di creare Uint8Array
+          let bufferData;
+          if (event.data instanceof Blob) {
+            // Se è un Blob, leggi come ArrayBuffer prima
+            bufferData = await event.data.arrayBuffer(); 
+          } else if (event.data instanceof ArrayBuffer) {
+            bufferData = event.data;
+          } else {
+             // Se è già Uint8Array o qualcos'altro, prova direttamente
+             // Se è una stringa, questo fallirà (ma non dovrebbe arrivare stringa se il server usa msgpack)
+             bufferData = event.data; 
+          }
+          data = msgpack.decode(new Uint8Array(bufferData));
+        } catch (decodeError) {
+          console.error('Errore decodifica msgpack:', decodeError, 'Dati ricevuti:', event.data);
+          return; // Interrompi se non possiamo decodificare
         }
+
+        console.log('Messaggio decodificato ricevuto:', data.type, data);
+        
+        switch(data.type) {
+            case 'state':
+                handleStateUpdate(data);
+                break;
+                
+            case 'join':
+                handlePlayerJoin(data);
+                break;
+                
+            case 'move':
+                handlePlayerMove(data);
+                break;
+                
+            case 'leave':
+                handlePlayerLeave(data);
+                break;
+                
+            case 'error':
+                console.error('Errore dal server:', data.message);
+                showMessage('Errore: ' + data.message, 'warning');
+                break;
+                
+            case 'pong':
+                // Calcola la latenza
+                if (data.timestamp) {
+                    const latency = Date.now() - data.timestamp;
+                    gameState.latency = latency;
+                    // Solo per debug
+                    // console.log(`Latenza: ${latency}ms`);
+                }
+                break;
+        }
+      } catch (error) {
+        console.error('Errore nel parsing del messaggio:', error);
+      }
     };
     
     socket.onclose = (event) => {
@@ -7274,8 +7301,6 @@ window.initGame = async function initGame(username) {
     // Connetti al WebSocket
     connectWebSocket();
     
-    // Aggiungi event listeners
-    setupEventListeners();
     
     // Inizializza controlli mobile
     initMobileControls();
