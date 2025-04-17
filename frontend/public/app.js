@@ -4427,3 +4427,155 @@ async function initGame() {
     showMessage('Errore inizializzazione gioco. Ricarica la pagina.', 'error');
   }
 }
+
+// Funzione per inizializzare PixiJS
+function initPixiJS() {
+    console.log("Inizializzazione PixiJS");
+    try {
+        // Verifica se PIXI è disponibile
+        if (typeof PIXI === 'undefined') {
+            console.error("PIXI non è definito");
+            showMessage("Impossibile inizializzare il gioco. Ricarica la pagina o prova un browser diverso.", "error");
+            return false;
+        }
+        
+        // Opzioni per l'app PixiJS
+        const appOptions = {
+            backgroundColor: 0x1a1a1a,
+            resolution: window.devicePixelRatio || 1,
+            antialias: true,
+            autoDensity: true,
+            powerPreference: 'high-performance',
+            // Non specificare il renderer, lasciamo che PixiJS scelga quello migliore
+        };
+        
+        // Crea l'app PixiJS
+        app = new PIXI.Application(appOptions);
+        
+        // Rimuovi qualsiasi canvas precedente
+        const existingCanvas = document.querySelector('#game-container canvas');
+        if (existingCanvas) {
+            existingCanvas.remove();
+        }
+        
+        // Aggiungi il nuovo canvas al container
+        const gameContainer = document.getElementById('game-container');
+        gameContainer.appendChild(app.view);
+        
+        // Imposta le dimensioni
+        app.renderer.resize(window.innerWidth, window.innerHeight);
+        
+        // Registra il tipo di renderer utilizzato
+        console.log(`Utilizzando renderer: ${app.renderer.type === PIXI.RENDERER_TYPE.WEBGL ? 'WebGL' : 'Canvas'}`);
+        
+        return true;
+    } catch (error) {
+        console.error("Errore nell'inizializzazione di PixiJS:", error);
+        showMessage("Si è verificato un errore durante l'inizializzazione del gioco", "error");
+        return false;
+    }
+}
+
+// Mostra un messaggio a schermo
+function showMessage(text, type = 'info') {
+    const message = document.createElement('div');
+    message.className = `message ${type}`;
+    message.textContent = text;
+    
+    const container = document.getElementById('message-container');
+    if (container) {
+        container.appendChild(message);
+        
+        // Rimuovi dopo un po'
+        setTimeout(() => {
+            message.classList.add('fade-out');
+            setTimeout(() => {
+                if (message.parentNode) {
+                    message.parentNode.removeChild(message);
+                }
+            }, 300);
+        }, 3000);
+    } else {
+        console.warn('Container messaggi non trovato');
+    }
+}
+
+// Funzione di gameloop base
+function gameLoop(delta) {
+    // Aggiorna posizione e stato degli elementi di gioco
+    if (gameState.players && gameState.playerId) {
+        const localPlayer = gameState.players.get(gameState.playerId);
+        if (localPlayer && localPlayer.sprite) {
+            // Logica di aggiornamento del giocatore
+        }
+    }
+    
+    // Aggiorna le sfere di energia
+    if (gameState.energyPoints) {
+        gameState.energyPoints.forEach(point => {
+            if (point && point.sprite) {
+                // Logica di aggiornamento delle sfere energia
+            }
+        });
+    }
+}
+
+// Funzione per gestire l'orientamento del dispositivo
+function handleDeviceOrientation() {
+    // Verifica se è un dispositivo mobile
+    if (isMobileDevice()) {
+        const checkOrientation = () => {
+            const isPortrait = window.innerHeight > window.innerWidth;
+            const orientationMessage = document.getElementById('orientation-message');
+            
+            if (isPortrait) {
+                // Crea messaggio se non esiste
+                if (!orientationMessage) {
+                    const message = document.createElement('div');
+                    message.id = 'orientation-message';
+                    message.innerHTML = `
+                        <div class="orientation-content">
+                            <div class="device-icon">📱</div>
+                            <div class="message-text">Ruota il dispositivo in orizzontale per una migliore esperienza di gioco</div>
+                        </div>
+                    `;
+                    message.style.position = 'fixed';
+                    message.style.top = '0';
+                    message.style.left = '0';
+                    message.style.width = '100%';
+                    message.style.height = '100%';
+                    message.style.display = 'flex';
+                    message.style.alignItems = 'center';
+                    message.style.justifyContent = 'center';
+                    message.style.backgroundColor = 'rgba(0,0,0,0.8)';
+                    message.style.zIndex = '9999';
+                    message.style.color = 'white';
+                    message.style.fontFamily = 'Arial, sans-serif';
+                    message.style.textAlign = 'center';
+                    message.style.padding = '20px';
+                    
+                    document.body.appendChild(message);
+                }
+            } else {
+                // Rimuovi messaggio se esiste
+                if (orientationMessage) {
+                    orientationMessage.remove();
+                }
+            }
+        };
+        
+        // Controlla subito orientamento
+        checkOrientation();
+        
+        // Aggiungi listener per il resize
+        window.addEventListener('resize', checkOrientation);
+    }
+}
+
+// Funzione per controllare se il dispositivo è mobile
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+}
+
+// ... existing code ...
