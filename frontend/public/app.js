@@ -46,21 +46,41 @@ function initPixiJS() {
       throw new Error("PixiJS non disponibile. Verifica che sia caricato correttamente.");
     }
     
-    // Controlla il supporto WebGL
-    let renderer = PIXI.autoDetectRenderer();
-    let isWebGLSupported = renderer instanceof PIXI.WebGLRenderer;
-    renderer.destroy();
+    // Metodo più sicuro per controllare il supporto WebGL
+    let isWebGLSupported = false;
+    try {
+      // In PixiJS v6+
+      if (PIXI.utils && PIXI.utils.isWebGLSupported) {
+        isWebGLSupported = PIXI.utils.isWebGLSupported();
+      } else {
+        // Fallback per PixiJS v7+
+        isWebGLSupported = true; // Lasciamo che PixiJS decida il miglior renderer
+      }
+    } catch (e) {
+      console.warn("Impossibile verificare il supporto WebGL:", e);
+      isWebGLSupported = true; // Assumiamo supporto e lasciamo che PixiJS gestisca il fallback
+    }
     
-    // Crea l'applicazione PixiJS
-    let pixiApp = new PIXI.Application({
+    // Crea l'applicazione PixiJS con opzioni appropriate
+    const appOptions = {
       width: window.innerWidth,
       height: window.innerHeight,
       backgroundColor: 0x061639,
       resolution: window.devicePixelRatio || 1,
-      antialias: true,
-      autoDensity: true,
-      powerPreference: "high-performance"
-    });
+      autoDensity: true
+    };
+    
+    // Aggiungi opzioni specifiche in base alla versione
+    if (isWebGLSupported) {
+      appOptions.forceCanvas = false;
+      appOptions.powerPreference = "high-performance";
+      appOptions.antialias = true;
+    } else {
+      appOptions.forceCanvas = true;
+    }
+    
+    console.log("Creazione app PixiJS con opzioni:", appOptions);
+    let pixiApp = new PIXI.Application(appOptions);
     
     // Aggiungi il canvas al container
     const gameContainer = document.getElementById('game-container');
@@ -82,7 +102,7 @@ function initPixiJS() {
     });
     
     console.log("PixiJS inizializzato con successo:", 
-      isWebGLSupported ? "Rendering WebGL" : "Rendering Canvas");
+      isWebGLSupported ? "Rendering WebGL preferito" : "Rendering Canvas preferito");
     
     return pixiApp;
   } catch (error) {
@@ -160,25 +180,28 @@ window.initGame = async function initGame(username) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
     
-    // Inizializza il renderer PRIMA di caricare le texture
-    const appInstance = initPixiJS(); 
-    
-    // Verifica se app è stato creato correttamente
-    if (!appInstance || !window.app) {
-      throw new Error('Applicazione PixiJS non creata correttamente');
-    }
-    
-    // Esplicita assegnazione globale
-    window.app = appInstance;
-    app = appInstance;
-
-    // Inizializza gameState
+    // IMPORTANTE: Inizializza lo stato prima di tutto
     window.gameState = gameState;
     
     // Imposta il nome del giocatore
     playerName = username;
     gameState.playerId = `local_${Math.random().toString(36).substr(2, 9)}`;
-
+    
+    // Inizializza il renderer PRIMA di caricare le texture
+    console.log('Inizializzazione renderer PixiJS...');
+    const appInstance = initPixiJS(); 
+    
+    // Verifica se app è stato creato correttamente
+    if (!appInstance) {
+      throw new Error('Applicazione PixiJS non creata correttamente');
+    }
+    
+    // Esplicita assegnazione globale e variabile locale
+    window.app = appInstance;
+    app = appInstance;
+    
+    console.log('Renderer PixiJS inizializzato con successo');
+    
     // PUNTO CRITICO 1: Crea i container PRIMA DI TUTTO
     console.log('Creazione container principali...');
     
@@ -289,6 +312,13 @@ window.initGame = async function initGame(username) {
       console.log('Inizializzazione strumenti di debug...');
       window.initBrawlDebugger(app, gameState, PIXI);
     }
+
+    // Stampa un log per confermare che gameState e app sono disponibili globalmente
+    console.log('Oggetti globali disponibili:', {
+      app: window.app ? 'SÌ' : 'NO',
+      gameState: window.gameState ? 'SÌ' : 'NO',
+      PIXI: window.PIXI ? 'SÌ' : 'NO'
+    });
 
     // Inizializza i controlli
     initControls();
