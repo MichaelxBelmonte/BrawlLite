@@ -1997,10 +1997,11 @@ function connectWebSocket() {
             bufferData = await event.data.arrayBuffer(); 
           } else if (event.data instanceof ArrayBuffer) {
             bufferData = event.data;
+          } else if (event.data instanceof Uint8Array) {
+             bufferData = event.data; // Già Uint8Array
           } else {
-             // Se è già Uint8Array o qualcos'altro, prova direttamente
-             // Se è una stringa, questo fallirà (ma non dovrebbe arrivare stringa se il server usa msgpack)
-             bufferData = event.data; 
+             console.warn('Tipo dati WebSocket non riconosciuto:', typeof event.data);
+             bufferData = event.data; // Prova comunque
           }
           data = msgpack.decode(new Uint8Array(bufferData));
         } catch (decodeError) {
@@ -2008,7 +2009,7 @@ function connectWebSocket() {
           return; // Interrompi se non possiamo decodificare
         }
 
-        console.log('Messaggio decodificato ricevuto:', data.type, data);
+        console.log('Messaggio decodificato ricevuto:', data ? data.type : 'N/D', data);
         
         switch(data.type) {
             case 'state':
@@ -7292,6 +7293,9 @@ window.initGame = async function initGame(username) {
        // Inizializza il renderer PRIMA di caricare le texture
        initPixiJS();
 
+       // Aggiungi un piccolo ritardo per dare tempo al renderer di inizializzarsi completamente
+       await new Promise(resolve => setTimeout(resolve, 100)); // Attendi 100ms
+
        // Carica textures
        await loadGameTextures();
     
@@ -7300,7 +7304,6 @@ window.initGame = async function initGame(username) {
     
     // Connetti al WebSocket
     connectWebSocket();
-    
     
     // Inizializza controlli mobile
     initMobileControls();
