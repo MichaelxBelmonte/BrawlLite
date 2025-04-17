@@ -5079,7 +5079,7 @@ function createEnergyPoint(x, y) {
   if (gameState.containers && gameState.containers.energy) {
     gameState.containers.energy.addChild(sprite);
     console.log(`Energy point creato a ${x},${y}`);
-  } else {
+    } else {
     console.warn('Container energia non disponibile');
   }
   
@@ -6926,10 +6926,10 @@ function createEnergyPoint(x, y) {
     
     // Aggiungi effetto pulse per migliorare visibilitÃ 
     const pulseAnimation = () => {
-      gsap.to(sprite.scale, {
+    gsap.to(sprite.scale, {
         x: 1.2,
         y: 1.2,
-        duration: 0.8,
+      duration: 0.8,
         yoyo: true,
         repeat: -1,
         ease: "sine.inOut"
@@ -7001,10 +7001,10 @@ function createPlayer(id, x, y, size, username, isCurrentPlayer = false) {
         x: 1.2,
         y: 1.2,
         duration: 1,
-        repeat: -1,
-        yoyo: true,
-        ease: "sine.inOut"
-      });
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut"
+    });
     }
     
     // Aggiungi lo sprite al container
