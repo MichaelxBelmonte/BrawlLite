@@ -1,4 +1,4 @@
-// Configurazione PixiJS
+﻿// Configurazione PixiJS
 let app;
 let socket;
 let reconnectAttempts = 0;
@@ -8,8 +8,8 @@ const msgpack = window.msgpack5();
 const WORLD_CONFIG = {
   width: 3000,
   height: 3000,
-  minZoom: 0.5,  // Zoom minimo (più lontano)
-  maxZoom: 1.2,  // Zoom massimo (più vicino)
+  minZoom: 0.5,  // Zoom minimo (piÃ¹ lontano)
+  maxZoom: 1.2,  // Zoom massimo (piÃ¹ vicino)
   padding: 50    // Padding dai bordi
 };
 
@@ -77,7 +77,7 @@ class MovementPredictor {
     const now = Date.now();
     const renderTime = now - this.latency;
     
-    // Trova i due snapshot più vicini al tempo di rendering
+    // Trova i due snapshot piÃ¹ vicini al tempo di rendering
     let prev = this.buffer[0];
     let next = this.buffer[1];
     
@@ -118,7 +118,7 @@ class MovementPredictor {
     const dy = serverState.y - this.current.y;
     const distance = Math.sqrt(dx*dx + dy*dy);
     
-    // Se la differenza è troppo grande, applica una correzione graduale
+    // Se la differenza Ã¨ troppo grande, applica una correzione graduale
     if (distance > this.reconciliationThreshold) {
       console.log(`Riconciliazione stato: differenza ${distance.toFixed(2)}px`);
       
@@ -133,7 +133,7 @@ class MovementPredictor {
       return corrected;
     }
     
-    // Se la differenza è accettabile, mantieni lo stato corrente
+    // Se la differenza Ã¨ accettabile, mantieni lo stato corrente
     return this.current;
   }
 }
@@ -208,27 +208,27 @@ const renderQualityManager = {
     }
   },
   
-  // Applica le impostazioni di qualità
+  // Applica le impostazioni di qualitÃ 
   applyQuality(level) {
     if (!this.settings.qualityLevels[level]) {
-      console.error(`Livello di qualità non valido: ${level}`);
+      console.error(`Livello di qualitÃ  non valido: ${level}`);
       return false;
     }
     
     const settings = this.settings.qualityLevels[level];
     this.settings.currentQuality = level;
     
-    // Applica le impostazioni di rendering se PIXI è inizializzato
+    // Applica le impostazioni di rendering se PIXI Ã¨ inizializzato
     if (app && app.renderer) {
-      console.log(`Applicazione qualità ${level}: resolution=${settings.resolution}`);
+      console.log(`Applicazione qualitÃ  ${level}: resolution=${settings.resolution}`);
       
       // Imposta la risoluzione del renderer
       app.renderer.resolution = settings.resolution;
       
-      // Gestisci i filtri in base al livello di qualità
+      // Gestisci i filtri in base al livello di qualitÃ 
       this.updateFilters(settings.filterLevel);
       
-      // Memorizza la densità particelle per futuri effetti
+      // Memorizza la densitÃ  particelle per futuri effetti
       gameState.particleDensity = settings.particleDensity;
       gameState.maxParticles = settings.maxParticles;
     }
@@ -248,7 +248,7 @@ const renderQualityManager = {
     }
   },
   
-  // Monitora gli FPS e regola la qualità automaticamente
+  // Monitora gli FPS e regola la qualitÃ  automaticamente
   monitorPerformance(fps) {
     if (!this.settings.autoAdjust) return;
     
@@ -261,24 +261,24 @@ const renderQualityManager = {
     // Calcola la media degli FPS
     const avgFps = this.settings.fpsHistory.reduce((sum, val) => sum + val, 0) / this.settings.fpsHistory.length;
     
-    // Regola qualità se necessario
+    // Regola qualitÃ  se necessario
     if (this.settings.fpsHistory.length >= 30) {
       if (avgFps < this.settings.fpsLow && this.settings.currentQuality !== 'low') {
-        console.log(`Performance bassa (${avgFps.toFixed(1)} FPS): passaggio a qualità bassa`);
+        console.log(`Performance bassa (${avgFps.toFixed(1)} FPS): passaggio a qualitÃ  bassa`);
         this.applyQuality('low');
       } else if (avgFps > this.settings.fpsTarget * 1.2 && this.settings.currentQuality === 'low') {
-        console.log(`Performance buona (${avgFps.toFixed(1)} FPS): passaggio a qualità media`);
+        console.log(`Performance buona (${avgFps.toFixed(1)} FPS): passaggio a qualitÃ  media`);
         this.applyQuality('medium');
       } else if (avgFps > this.settings.fpsTarget * 1.5 && this.settings.currentQuality === 'medium') {
-        console.log(`Performance eccellente (${avgFps.toFixed(1)} FPS): passaggio a qualità alta`);
+        console.log(`Performance eccellente (${avgFps.toFixed(1)} FPS): passaggio a qualitÃ  alta`);
         this.applyQuality('high');
       }
     }
   },
   
-  // Inizializza il gestore qualità
+  // Inizializza il gestore qualitÃ 
   init() {
-    // Rileva e imposta la qualità iniziale
+    // Rileva e imposta la qualitÃ  iniziale
     const initialQuality = this.detectPerformanceLevel();
     console.log(`Livello prestazioni rilevato: ${initialQuality}`);
     this.applyQuality(initialQuality);
@@ -292,7 +292,7 @@ const renderQualityManager = {
   },
 };
 
-// Estensione della classe DynamicCamera con funzionalità avanzate
+// Estensione della classe DynamicCamera con funzionalitÃ  avanzate
 class DynamicCamera {
   constructor() {
     this.x = 0;
@@ -389,7 +389,7 @@ class DynamicCamera {
     const zoomX = (window.innerWidth - 100) / (boundsWidth * this.advancedConfig.playerWeight + WORLD_CONFIG.width * this.advancedConfig.mapWeight);
     const zoomY = (window.innerHeight - 100) / (boundsHeight * this.advancedConfig.playerWeight + WORLD_CONFIG.height * this.advancedConfig.mapWeight);
     
-    // Usa il minore dei due zoom e applica il fattore di decadimento per più giocatori
+    // Usa il minore dei due zoom e applica il fattore di decadimento per piÃ¹ giocatori
     const baseZoom = Math.min(zoomX, zoomY);
     const adjustedZoom = baseZoom * Math.pow(this.advancedConfig.zoomDecayFactor, Math.min(players.size, this.advancedConfig.maxPlayersForZoom));
     
@@ -435,7 +435,7 @@ class DynamicCamera {
     this.targetZoom = Math.min(optimalZoom, sizeZoomFactor * WORLD_CONFIG.maxZoom);
   }
   
-  // Overload di updateZoom per compatibilità
+  // Overload di updateZoom per compatibilitÃ 
   updateZoom(playerCount, playerSize) {
     // Fallback al metodo originale se non ci sono giocatori
     if (!gameState.players || gameState.players.size === 0) {
@@ -470,7 +470,7 @@ class DynamicCamera {
     this.x += (this.targetX - this.x) * positionSmooth * delta;
     this.y += (this.targetY - this.y) * positionSmooth * delta;
     
-    // Interpolazione più lenta dello zoom per evitare cambi bruschi
+    // Interpolazione piÃ¹ lenta dello zoom per evitare cambi bruschi
     this.zoom += (this.targetZoom - this.zoom) * zoomSmooth * delta;
     
     // Applica trasformazioni al container del mondo
@@ -505,7 +505,7 @@ class DynamicCamera {
     this.targetY = target.y;
   }
   
-  // Zoom rapido temporaneo (es. per visione più ampia)
+  // Zoom rapido temporaneo (es. per visione piÃ¹ ampia)
   zoomOut(factor) {
     this.targetZoom = Math.max(WORLD_CONFIG.minZoom, this.targetZoom * factor);
   }
@@ -580,7 +580,7 @@ function initFpsCounter() {
     dropShadowDistance: 2
   });
   
-  // Imposta la posizione e visibilità
+  // Imposta la posizione e visibilitÃ 
   fpsCounter.x = 10;
   fpsCounter.y = 10;
   fpsCounter.alpha = 0.8;
@@ -608,7 +608,7 @@ function updateFpsCounter(fps) {
     gameState.fpsCounter.style.fill = 0xff0000;
   }
   
-  // Monitora le prestazioni per regolare la qualità
+  // Monitora le prestazioni per regolare la qualitÃ 
   if (renderQualityManager) {
     renderQualityManager.monitorPerformance(fps);
   }
@@ -619,13 +619,13 @@ function isMobileDevice() {
          (window.innerWidth <= 800 && window.innerHeight <= 600);
 }
 
-// Modifica la funzione initGame per usare il sistema di qualità
+// Modifica la funzione initGame per usare il sistema di qualitÃ 
 function initGame() {
   console.log("Inizializzazione del gioco");
   
-  // Inizializza il gestore qualità prima di tutto
+  // Inizializza il gestore qualitÃ  prima di tutto
   const qualityLevel = renderQualityManager.init();
-  console.log(`Inizializzazione del gioco con qualità: ${qualityLevel}`);
+  console.log(`Inizializzazione del gioco con qualitÃ : ${qualityLevel}`);
   
   // Inizializza PixiJS con le impostazioni appropriate
   const success = initPixiJS();
@@ -678,7 +678,7 @@ function initGame() {
   
   // Imposta il loop di gioco principale
   app.ticker.add(delta => {
-    if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+    if (gameState.contextLost) return; // Salta il rendering se il contesto Ã¨ perso
     
     // Aggiorna movimento
     updateMovement(delta);
@@ -709,7 +709,7 @@ function initGame() {
     
     // Controlla collisioni con i punti energia
     gameState.energyPoints.forEach((point, index) => {
-      // Salta punti già raccolti
+      // Salta punti giÃ  raccolti
       if (!point.visible) return;
       
       // Calcola distanza tra giocatore e punto energia
@@ -779,7 +779,7 @@ function updateEnergyPoints(delta) {
   
   // Controlla collisioni con i punti energia
   gameState.energyPoints.forEach((point, index) => {
-    // Salta punti già raccolti
+    // Salta punti giÃ  raccolti
     if (!point.visible) return;
     
     // Calcola distanza tra giocatore e punto energia
@@ -848,7 +848,7 @@ function checkLevelUp(newSize) {
     }
   }
   
-  // Se il livello è cambiato
+  // Se il livello Ã¨ cambiato
   if (newLevel > gameState.level) {
     gameState.level = newLevel;
     
@@ -858,17 +858,17 @@ function checkLevelUp(newSize) {
     // Mostra messaggio di avanzamento
     showMessage(`Hai raggiunto il livello ${newLevel}: ${levelInfo.name}!`, 'success');
     
-    // Se il livello ha un'abilità, mostra un messaggio
+    // Se il livello ha un'abilitÃ , mostra un messaggio
     if (levelInfo.ability) {
-      showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
+      showMessage(`Hai sbloccato l'abilitÃ : ${getAbilityName(levelInfo.ability)}!`, 'info');
     }
   };
 }
 
-// Funzione per ottenere il nome dell'abilità
+// Funzione per ottenere il nome dell'abilitÃ 
 function getAbilityName(abilityKey) {
   const abilityNames = {
-    'speed': 'Velocità',
+    'speed': 'VelocitÃ ',
     'shield': 'Scudo',
     'attack': 'Attacco'
   };
@@ -890,7 +890,7 @@ function createParticleEffect(x, y, color, count) {
     particle.x = x;
     particle.y = y;
     
-    // Velocità e direzione casuale
+    // VelocitÃ  e direzione casuale
     const angle = Math.random() * Math.PI * 2;
     const speed = 1 + Math.random() * 3;
     particle.vx = Math.cos(angle) * speed;
@@ -985,9 +985,9 @@ function createCollectEffect(x, y) {
 function initPixiJS() {
     console.log("Inizializzazione PixiJS");
     try {
-        // Verifica se PIXI è disponibile
+        // Verifica se PIXI Ã¨ disponibile
         if (typeof PIXI === 'undefined') {
-            console.error("PIXI non è definito");
+            console.error("PIXI non Ã¨ definito");
             showMessage("Impossibile inizializzare il gioco. Ricarica la pagina o prova un browser diverso.", "error");
             return false;
         }
@@ -1037,7 +1037,7 @@ function initPixiJS() {
                 // Mostra un messaggio all'utente
                 showMessage('Perdita contesto grafico. Tentativo di ripristino in corso...', 'warning');
                 
-                // Flag per indicare che il contesto è perso
+                // Flag per indicare che il contesto Ã¨ perso
                 gameState.contextLost = true;
             }, false);
             
@@ -1069,7 +1069,7 @@ function initPixiJS() {
                 
                 if (webGLFailCount >= maxWebGLFailures) {
                     console.warn('Troppi fallimenti WebGL, passaggio al renderer Canvas');
-                    showMessage('Problemi con il renderer WebGL. Passaggio alla modalità compatibilità.', 'warning');
+                    showMessage('Problemi con il renderer WebGL. Passaggio alla modalitÃ  compatibilitÃ .', 'warning');
                     
                     // Ricrea l'app con il renderer Canvas
                     reinitWithCanvasRenderer();
@@ -1086,7 +1086,7 @@ function initPixiJS() {
         return true;
     } catch (error) {
         console.error("Errore nell'inizializzazione di PixiJS:", error);
-        showMessage("Si è verificato un errore durante l'inizializzazione del gioco", "error");
+        showMessage("Si Ã¨ verificato un errore durante l'inizializzazione del gioco", "error");
         return false;
     }
 }
@@ -1127,12 +1127,12 @@ function reinitWithCanvasRenderer() {
         console.log("Reinizializzazione completata con renderer Canvas");
         
         // Notifica all'utente
-        showMessage("Modalità compatibilità attivata", "info");
+        showMessage("ModalitÃ  compatibilitÃ  attivata", "info");
         
         return true;
     } catch (error) {
         console.error("Errore nella reinizializzazione con Canvas renderer:", error);
-        showMessage("Impossibile avviare il gioco in modalità compatibilità", "error");
+        showMessage("Impossibile avviare il gioco in modalitÃ  compatibilitÃ ", "error");
         return false;
     }
 }
@@ -1161,7 +1161,7 @@ function refreshGameObjects() {
     playerIds.forEach(id => {
         const oldPlayer = gameState.players.get(id);
         if (oldPlayer) {
-            // Salva le proprietà importanti
+            // Salva le proprietÃ  importanti
             const props = {
                 x: oldPlayer.x,
                 y: oldPlayer.y,
@@ -1226,12 +1226,12 @@ function updateMovement(delta) {
     y: player.y
   };
   
-  // Calcola la velocità in base al delta e alla dimensione
-  // Giocatori più grandi si muovono più lentamente
+  // Calcola la velocitÃ  in base al delta e alla dimensione
+  // Giocatori piÃ¹ grandi si muovono piÃ¹ lentamente
   const sizeSpeedFactor = Math.max(0.5, 1 - (player.size / 300));
   const moveSpeed = PLAYER_SPEED * delta * sizeSpeedFactor;
   
-  // Variabile per tracciare se il giocatore si è spostato
+  // Variabile per tracciare se il giocatore si Ã¨ spostato
   let moved = false;
   
   // Aggiorna movimento basato su tasti
@@ -1394,7 +1394,7 @@ function updatePlayerSize(player, newSize) {
   // Memorizza la vecchia dimensione
   const oldSize = player.size;
   
-  // Aggiorna la proprietà size
+  // Aggiorna la proprietÃ  size
   player.size = newSize;
   
   // Aggiorna il corpo del giocatore
@@ -1420,7 +1420,7 @@ function updatePlayerSize(player, newSize) {
     player.children[2].y = -newSize / 2 - 15;
   }
   
-  // Crea effetto level up se è il giocatore locale e la dimensione è aumentata
+  // Crea effetto level up se Ã¨ il giocatore locale e la dimensione Ã¨ aumentata
   if (player.isLocal && newSize > oldSize) {
     createLevelUpEffect(player);
     checkLevelUp(player);
@@ -1443,20 +1443,20 @@ function checkLevelUp(player) {
     }
   }
   
-  // Se il livello è cambiato
+  // Se il livello Ã¨ cambiato
   if (newLevel > player.level) {
     player.level = newLevel;
     
-    // Trova l'abilità sbloccata a questo livello
+    // Trova l'abilitÃ  sbloccata a questo livello
     const levelData = LEVEL_THRESHOLDS.find(l => l.level === newLevel);
     
     if (levelData) {
       // Mostra messaggio di level up
       showMessage(`Livello ${newLevel}: ${levelData.name}!`, 'success');
       
-      // Se c'è un'abilità, mostra info
+      // Se c'Ã¨ un'abilitÃ , mostra info
       if (levelData.ability) {
-        showMessage(`Hai sbloccato l'abilità: ${levelData.ability.toUpperCase()}`, 'info', 3000);
+        showMessage(`Hai sbloccato l'abilitÃ : ${levelData.ability.toUpperCase()}`, 'info', 3000);
       }
     }
   };
@@ -1509,29 +1509,29 @@ function spawnEnergyPointAt(x, y) {
 function setupAutomaticRecovery() {
     // Controllo periodico dello stato del rendering
     const recoveryInterval = setInterval(() => {
-        // Se il contesto è perso da troppo tempo, tenta il ripristino forzato
+        // Se il contesto Ã¨ perso da troppo tempo, tenta il ripristino forzato
         if (gameState.contextLost) {
             const timeSinceLost = Date.now() - gameState.contextLostTime;
             
             if (timeSinceLost > 5000) { // 5 secondi
                 console.warn("Tentativo di recupero forzato del contesto...");
                 
-                // Tenta di passare al renderer Canvas se non ci siamo già
+                // Tenta di passare al renderer Canvas se non ci siamo giÃ 
                 if (app && app.renderer.type === PIXI.RENDERER_TYPE.WEBGL) {
                     reinitWithCanvasRenderer();
                 } else {
-                    // Se siamo già in Canvas o altro, ricrea tutto
+                    // Se siamo giÃ  in Canvas o altro, ricrea tutto
                     initGame();
                 }
             }
         }
         
-        // Verifica anche se l'app è in esecuzione ma ci sono problemi di rendering
+        // Verifica anche se l'app Ã¨ in esecuzione ma ci sono problemi di rendering
         if (app && app.ticker.started) {
-            // Se il giocatore locale non è visibile ma dovrebbe esserlo
+            // Se il giocatore locale non Ã¨ visibile ma dovrebbe esserlo
             const localPlayer = gameState.players.get(gameState.playerId);
             if (localPlayer && !localPlayer.visible && !gameState.contextLost) {
-                console.warn("Rilevato problema di visibilità, tentativo di recupero...");
+                console.warn("Rilevato problema di visibilitÃ , tentativo di recupero...");
                 refreshGameObjects();
             }
         }
@@ -1583,7 +1583,7 @@ function initGame(username) {
     
     // Imposta il loop di gioco principale
     app.ticker.add(delta => {
-        if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+        if (gameState.contextLost) return; // Salta il rendering se il contesto Ã¨ perso
         
         updateMovement(delta);
         interpolatePlayers(delta);
@@ -1626,7 +1626,7 @@ function handleStateUpdate(data) {
     updatedPlayerIds.add(playerData.id);
   });
   
-  // Rimuovi giocatori non più presenti (tranne il locale che dovrebbe sempre esserci)
+  // Rimuovi giocatori non piÃ¹ presenti (tranne il locale che dovrebbe sempre esserci)
   currentPlayerIds.forEach(id => {
     if (!updatedPlayerIds.has(id) && id !== gameState.playerId) {
       const player = gameState.players.get(id);
@@ -1637,7 +1637,7 @@ function handleStateUpdate(data) {
     }
   });
   
-  // Se non c'è il giocatore locale nel set aggiornato, assicurati che ci sia
+  // Se non c'Ã¨ il giocatore locale nel set aggiornato, assicurati che ci sia
   if (!updatedPlayerIds.has(gameState.playerId) && gameState.playerId) {
     const localPlayer = gameState.players.get(gameState.playerId);
     if (!localPlayer) {
@@ -1675,11 +1675,11 @@ function updateOrCreatePlayer(playerData) {
     gameState.players.set(playerData.id, player);
   }
   
-  // Aggiorna le proprietà del giocatore
+  // Aggiorna le proprietÃ  del giocatore
   if (player) {
     if (isLocal) {
       // Per il giocatore locale usiamo la position corrente
-      // ma aggiungiamo un po' di correzione se il server è troppo divergente
+      // ma aggiungiamo un po' di correzione se il server Ã¨ troppo divergente
       const serverX = playerData.x;
       const serverY = playerData.y;
       const localX = player.x;
@@ -1690,7 +1690,7 @@ function updateOrCreatePlayer(playerData) {
       const dy = serverY - localY;
       const distance = Math.sqrt(dx*dx + dy*dy);
       
-      // Se la divergenza è grande, correggila gradualmente
+      // Se la divergenza Ã¨ grande, correggila gradualmente
       if (distance > 100) {
         player.x += dx * 0.2;
         player.y += dy * 0.2;
@@ -1749,7 +1749,7 @@ function interpolateOtherPlayers(delta) {
     // Se ha coordinate target, interpolale
     if (typeof player.targetX === 'number' && typeof player.targetY === 'number') {
       // Quanto velocemente si muove il giocatore verso il target
-      // Giocatori più grandi si muovono più lentamente
+      // Giocatori piÃ¹ grandi si muovono piÃ¹ lentamente
       const sizeFactor = Math.max(0.5, 1 - (player.size / 500)); 
       const lerpFactor = 0.1 * sizeFactor * delta;
       
@@ -1776,7 +1776,7 @@ function createMovementTrail(player, delta) {
   player.lastX = player.x;
   player.lastY = player.y;
   
-  // Se il movimento è minimo o non abbiamo particelle, salta
+  // Se il movimento Ã¨ minimo o non abbiamo particelle, salta
   if (distance < 3 || !gameState.particleDensity) return;
   
   // Crea particelle in base alla dimensione del giocatore e alle performance
@@ -1805,7 +1805,7 @@ function createMovementTrail(player, delta) {
       trail.x = player.x - Math.cos(angle) * radius;
       trail.y = player.y - Math.sin(angle) * radius;
       
-      // Aggiungi alle possibili proprietà per l'animazione
+      // Aggiungi alle possibili proprietÃ  per l'animazione
       trail.alpha = 0.7;
       
       // Aggiungi alla scena
@@ -1924,11 +1924,11 @@ function connectWebSocket() {
             socket.close();
             
             // Mostra un messaggio all'utente
-            showMessage('Impossibile connettersi al server. Riprova più tardi.', 'warning');
+            showMessage('Impossibile connettersi al server. Riprova piÃ¹ tardi.', 'warning');
             
-            // In modalità di sviluppo, offri di continuare in modalità offline
+            // In modalitÃ  di sviluppo, offri di continuare in modalitÃ  offline
             if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                if (confirm('Vuoi continuare in modalità offline (solo sviluppo)?')) {
+                if (confirm('Vuoi continuare in modalitÃ  offline (solo sviluppo)?')) {
                     enableOfflineMode();
                 }
             }
@@ -2024,7 +2024,7 @@ function connectWebSocket() {
         console.log('Connessione WebSocket chiusa', event.code, event.reason);
         clearInterval(gameState.pingInterval);
         
-        // Se è stata chiusa in modo pulito, non riconnettere
+        // Se Ã¨ stata chiusa in modo pulito, non riconnettere
         if (event.wasClean) {
             showMessage('Disconnesso dal server', 'info');
         } else {
@@ -2038,7 +2038,7 @@ function connectWebSocket() {
                 if (document.visibilityState !== 'hidden') {
                     connectWebSocket();
                 } else {
-                    // Se la pagina è in background, rimandiamo la riconnessione
+                    // Se la pagina Ã¨ in background, rimandiamo la riconnessione
                     document.addEventListener('visibilitychange', function reconnectOnVisible() {
                         if (document.visibilityState === 'visible') {
                             document.removeEventListener('visibilitychange', reconnectOnVisible);
@@ -2052,7 +2052,7 @@ function connectWebSocket() {
     
     socket.onerror = (error) => {
         console.error('Errore WebSocket:', error);
-        // Mostra un messaggio più descrittivo
+        // Mostra un messaggio piÃ¹ descrittivo
         showMessage(`Errore di connessione al server. Verifica la tua connessione.`, 'warning');
     };
 }
@@ -2120,7 +2120,7 @@ function handleStateUpdate(data) {
         }
     });
     
-    // Rimuovi giocatori che non sono più presenti
+    // Rimuovi giocatori che non sono piÃ¹ presenti
     const activePlayers = new Set(data.players.map(p => p.id));
     [...gameState.players.keys()].forEach(id => {
         if (!activePlayers.has(id) && id !== gameState.playerId) {
@@ -2133,7 +2133,7 @@ function handleStateUpdate(data) {
         }
     });
     
-    // Se il giocatore locale è stato rimosso, ricrealo
+    // Se il giocatore locale Ã¨ stato rimosso, ricrealo
     if (!localPlayerExists && !activePlayers.has(gameState.playerId)) {
         console.warn('Giocatore locale non trovato, ricreazione...');
         const localPlayer = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
@@ -2157,7 +2157,7 @@ function handlePlayerJoin(data) {
     // Ignora se siamo noi stessi
     if (data.id === gameState.playerId) return;
     
-    // Verifica se il giocatore esiste già
+    // Verifica se il giocatore esiste giÃ 
     if (!gameState.players.has(data.id)) {
         const newPlayer = createPlayerSprite(data.id);
         if (newPlayer) {
@@ -2174,14 +2174,14 @@ function handlePlayerJoin(data) {
             gameState.players.set(data.id, newPlayer);
             
             // Mostra un messaggio di benvenuto
-            showMessage(`${data.name || 'Nuovo giocatore'} è entrato!`, 'info');
+            showMessage(`${data.name || 'Nuovo giocatore'} Ã¨ entrato!`, 'info');
         }
     };
 }
 
 // Gestisce il movimento di un giocatore
 function handlePlayerMove(data) {
-    // Ignora se siamo noi stessi (abbiamo già aggiornato localmente)
+    // Ignora se siamo noi stessi (abbiamo giÃ  aggiornato localmente)
     if (data.id === gameState.playerId) return;
     
     if (gameState.players.has(data.id)) {
@@ -2220,13 +2220,13 @@ function handlePlayerLeave(data) {
         
         // Mostra un messaggio
         const playerName = sprite.children[2].text || 'Un giocatore';
-        showMessage(`${playerName} è uscito`, 'info');
+        showMessage(`${playerName} Ã¨ uscito`, 'info');
     };
 }
 
-// Abilita la modalità offline (solo per sviluppo)
+// Abilita la modalitÃ  offline (solo per sviluppo)
 function enableOfflineMode() {
-    console.log("Attivazione modalità offline per sviluppo");
+    console.log("Attivazione modalitÃ  offline per sviluppo");
     
     // Crea un giocatore locale se non esiste
     if (!gameState.players.has(gameState.playerId)) {
@@ -2269,7 +2269,7 @@ function enableOfflineMode() {
     initEnergyPoints();
     
     // Mostra un messaggio
-    showMessage('Modalità offline attivata (sviluppo)', 'info');
+    showMessage('ModalitÃ  offline attivata (sviluppo)', 'info');
 }
 
 // Aggiorna la classifica dei giocatori
@@ -2309,7 +2309,7 @@ function updateLeaderboard() {
     });
 }
 
-// Inizializza gli effetti di sfondo (se anime.js è disponibile)
+// Inizializza gli effetti di sfondo (se anime.js Ã¨ disponibile)
 if (typeof anime !== 'undefined') {
     createBackgroundEffect();
 } else {
@@ -2377,19 +2377,19 @@ function createLevelUpEffect(x, y, level) {
     });
 }
 
-// Attiva un'abilità speciale
+// Attiva un'abilitÃ  speciale
 function activateAbility(ability) {
     const now = Date.now();
     const cooldown = gameState.abilities.cooldowns[ability] || 0;
     
-    // Controlla se l'abilità è in cooldown
+    // Controlla se l'abilitÃ  Ã¨ in cooldown
     if (now < cooldown) {
         const remainingSeconds = Math.ceil((cooldown - now) / 1000);
         showMessage(`${getAbilityName(ability)} in ricarica (${remainingSeconds}s)`, 'warning');
         return;
     }
     
-    // Esegue l'abilità in base al tipo
+    // Esegue l'abilitÃ  in base al tipo
     switch(ability) {
         case 'speed':
             activateSpeedBoost();
@@ -2403,7 +2403,7 @@ function activateAbility(ability) {
     };
 }
 
-// Abilità: Boost di velocità
+// AbilitÃ : Boost di velocitÃ 
 function activateSpeedBoost() {
     const player = gameState.players.get(gameState.playerId);
     if (!player) return;
@@ -2434,7 +2434,7 @@ function activateSpeedBoost() {
     }, duration);
 }
 
-// Crea effetto visivo per il boost di velocità
+// Crea effetto visivo per il boost di velocitÃ 
 function createSpeedEffect(player) {
     const trail = new PIXI.Graphics();
     app.stage.addChildAt(trail, 0); // Sotto il player
@@ -2464,7 +2464,7 @@ function createSpeedEffect(player) {
             trail.lineTo(trailPoints[i+1].x, trailPoints[i+1].y);
         }
         
-        // Rimuovi ticker se l'abilità non è più attiva
+        // Rimuovi ticker se l'abilitÃ  non Ã¨ piÃ¹ attiva
         if (!gameState.abilities.active.speed) {
             app.ticker.remove(trailTicker);
         }
@@ -2473,7 +2473,7 @@ function createSpeedEffect(player) {
     return trail;
 }
 
-// Abilità: Scudo protettivo
+// AbilitÃ : Scudo protettivo
 function activateShield() {
     const player = gameState.players.get(gameState.playerId);
     if (!player) return;
@@ -2533,7 +2533,7 @@ function createShieldEffect(player) {
     return shield;
 }
 
-// Abilità: Attacco a distanza
+// AbilitÃ : Attacco a distanza
 function fireAttack() {
     const player = gameState.players.get(gameState.playerId);
     if (!player) return;
@@ -2603,7 +2603,7 @@ function createProjectile(player, direction) {
     // Posiziona il proiettile davanti al giocatore
     container.x = player.x + direction.x * (player.size + 10);
     container.y = player.y + direction.y * (player.size + 10);
-    container.vx = direction.x * 10; // Velocità del proiettile
+    container.vx = direction.x * 10; // VelocitÃ  del proiettile
     container.vy = direction.y * 10;
     container.damage = 20; // Danno del proiettile
     container.ownerId = gameState.playerId; // Chi ha sparato
@@ -2813,7 +2813,7 @@ function showMessage(text, type = 'info') {
 function initEnergyPoints() {
     // Verifica che app sia inizializzato
     if (!app || !app.stage) {
-        console.error("PixiJS non è stato inizializzato correttamente");
+        console.error("PixiJS non Ã¨ stato inizializzato correttamente");
         return;
     }
     
@@ -2834,7 +2834,7 @@ function initEnergyPoints() {
 function spawnEnergyPoint() {
     // Verifica che app sia inizializzato
     if (!app || !app.stage || !app.screen) {
-        console.error("PixiJS non è stato inizializzato correttamente");
+        console.error("PixiJS non Ã¨ stato inizializzato correttamente");
         return null;
     }
     
@@ -2878,7 +2878,7 @@ function spawnEnergyPoint() {
     return container;
 }
 
-// Restituisce il nome dell'abilità
+// Restituisce il nome dell'abilitÃ 
 function getAbilityName(ability) {
     switch(ability) {
         case 'speed': return 'Scatto Turbo';
@@ -2888,7 +2888,7 @@ function getAbilityName(ability) {
     };
 }
 
-// Restituisce il tasto per attivare l'abilità
+// Restituisce il tasto per attivare l'abilitÃ 
 function getAbilityKey(ability) {
     switch(ability) {
         case 'speed': return 'q';
@@ -2898,7 +2898,7 @@ function getAbilityKey(ability) {
     };
 }
 
-// Restituisce il livello minimo per l'abilità
+// Restituisce il livello minimo per l'abilitÃ 
 function getAbilityMinLevel(ability) {
     const threshold = LEVEL_THRESHOLDS.find(t => t.ability === ability);
     return threshold ? threshold.level : 999;
@@ -2995,7 +2995,7 @@ function updatePlayerSize(player, newSize) {
     
     // Aggiorna dimensione visiva
     // Nota: in una implementazione reale, dovremmo ricreare la grafica 
-    // invece di usare scale, per semplicità usiamo scale qui
+    // invece di usare scale, per semplicitÃ  usiamo scale qui
     const scaleRatio = newSize / INITIAL_SIZE;
     player.scale.set(scaleRatio);
     
@@ -3035,7 +3035,7 @@ function createCollectEffect(x, y) {
     };
 }
 
-// Controlla se un giocatore può mangiare un altro
+// Controlla se un giocatore puÃ² mangiare un altro
 function checkPlayerCollisions() {
     const player = gameState.players.get(gameState.playerId);
     if (!player) return;
@@ -3049,7 +3049,7 @@ function checkPlayerCollisions() {
         const dy = player.y - otherPlayer.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        // Un giocatore può mangiare un altro se è almeno 30% più grande
+        // Un giocatore puÃ² mangiare un altro se Ã¨ almeno 30% piÃ¹ grande
         if (distance < player.size && player.size > otherPlayer.size * 1.3) {
             eatPlayer(player, otherPlayer, id);
         }
@@ -3083,7 +3083,7 @@ function eatPlayer(player, otherPlayer, otherId) {
 
 // Crea effetto visivo per mangiare un giocatore
 function createEatEffect(x, y) {
-    // Simile all'effetto di raccolta energia ma più grande
+    // Simile all'effetto di raccolta energia ma piÃ¹ grande
     for (let i = 0; i < 15; i++) {
         const particle = new PIXI.Graphics();
         particle.beginFill(0xff6600);
@@ -3137,7 +3137,7 @@ function collectEnergy(player, energyPoint, energyId) {
     const newSize = Math.min(player.size + 1, MAX_SIZE);
     updatePlayerSize(player, newSize);
     
-    // Controlla se il giocatore è salito di livello
+    // Controlla se il giocatore Ã¨ salito di livello
     checkLevelUp(player);
     
     // Rimuovi il punto energia
@@ -3166,7 +3166,7 @@ function showLevelUpMessage(rank, ability) {
     message.innerHTML = `
         <div class="level-title">Livello Aumentato!</div>
         <div class="level-rank">Sei diventato: ${rank}</div>
-        ${ability ? `<div class="level-ability">Nuova abilità: ${getAbilityName(ability)}</div>` : ''}
+        ${ability ? `<div class="level-ability">Nuova abilitÃ : ${getAbilityName(ability)}</div>` : ''}
         ${ability ? `<div class="level-key">Premi [${getAbilityKey(ability)}] per usarla</div>` : ''}
     `;
     
@@ -3186,7 +3186,7 @@ function showLevelUpMessage(rank, ability) {
     }, 3000);
 }
 
-// Sblocca una nuova abilità
+// Sblocca una nuova abilitÃ 
 function unlockAbility(ability) {
     // Aggiunge l'event listener per il tasto corrispondente
     if (!window[`${ability}KeyHandler`]) {
@@ -3201,7 +3201,7 @@ function unlockAbility(ability) {
     };
 }
 
-// Controlla se il giocatore è salito di livello
+// Controlla se il giocatore Ã¨ salito di livello
 function checkLevelUp(player) {
     // Trova il livello corrispondente alla dimensione attuale
     let newLevel = 1;
@@ -3213,7 +3213,7 @@ function checkLevelUp(player) {
         }
     }
     
-    // Se è salito di livello
+    // Se Ã¨ salito di livello
     if (newLevel > gameState.level) {
         const oldLevel = gameState.level;
         gameState.level = newLevel;
@@ -3224,7 +3224,7 @@ function checkLevelUp(player) {
         // Mostra messaggio di level up
         showLevelUpMessage(levelInfo.name, levelInfo.ability);
         
-        // Sblocca nuove abilità
+        // Sblocca nuove abilitÃ 
         if (levelInfo.ability) {
             unlockAbility(levelInfo.ability);
         }
@@ -3248,7 +3248,7 @@ function refreshGameObjects() {
         const newPlayer = createPlayerSprite(id, isLocalPlayer, oldPlayer.size);
         
         if (newPlayer) {
-            // Trasferisci proprietà importanti
+            // Trasferisci proprietÃ  importanti
             newPlayer.x = oldPlayer.x;
             newPlayer.y = oldPlayer.y;
             newPlayer.targetX = oldPlayer.targetX;
@@ -3281,7 +3281,7 @@ function refreshGameObjects() {
                 const owner = gameState.players.get(oldProj.ownerId);
                 if (owner) {
                     const direction = {
-                        x: oldProj.vx / 10, // Normalizza la velocità
+                        x: oldProj.vx / 10, // Normalizza la velocitÃ 
                         y: oldProj.vy / 10
                     };
                     createProjectile(owner, direction);
@@ -3290,7 +3290,7 @@ function refreshGameObjects() {
         });
     }
     
-    // Aggiorna tutti gli effetti visivi di abilità attive
+    // Aggiorna tutti gli effetti visivi di abilitÃ  attive
     if (gameState.abilities.active.speed && gameState.playerId) {
         const player = gameState.players.get(gameState.playerId);
         if (player) {
@@ -3310,7 +3310,7 @@ function refreshGameObjects() {
 function spawnEnergyPointAt(x, y) {
     // Verifica che app sia inizializzato
     if (!app || !app.stage) {
-        console.error("PixiJS non è stato inizializzato correttamente");
+        console.error("PixiJS non Ã¨ stato inizializzato correttamente");
         return null;
     }
     
@@ -3357,29 +3357,29 @@ function spawnEnergyPointAt(x, y) {
 function setupAutomaticRecovery() {
     // Controllo periodico dello stato del rendering
     const recoveryInterval = setInterval(() => {
-        // Se il contesto è perso da troppo tempo, tenta il ripristino forzato
+        // Se il contesto Ã¨ perso da troppo tempo, tenta il ripristino forzato
         if (gameState.contextLost) {
             const timeSinceLost = Date.now() - gameState.contextLostTime;
             
             if (timeSinceLost > 5000) { // 5 secondi
                 console.warn("Tentativo di recupero forzato del contesto...");
                 
-                // Tenta di passare al renderer Canvas se non ci siamo già
+                // Tenta di passare al renderer Canvas se non ci siamo giÃ 
                 if (app && app.renderer.type === PIXI.RENDERER_TYPE.WEBGL) {
                     reinitWithCanvasRenderer();
                 } else {
-                    // Se siamo già in Canvas o altro, ricrea tutto
+                    // Se siamo giÃ  in Canvas o altro, ricrea tutto
                     initGame();
                 }
             }
         }
         
-        // Verifica anche se l'app è in esecuzione ma ci sono problemi di rendering
+        // Verifica anche se l'app Ã¨ in esecuzione ma ci sono problemi di rendering
         if (app && app.ticker.started) {
-            // Se il giocatore locale non è visibile ma dovrebbe esserlo
+            // Se il giocatore locale non Ã¨ visibile ma dovrebbe esserlo
             const localPlayer = gameState.players.get(gameState.playerId);
             if (localPlayer && !localPlayer.visible && !gameState.contextLost) {
-                console.warn("Rilevato problema di visibilità, tentativo di recupero...");
+                console.warn("Rilevato problema di visibilitÃ , tentativo di recupero...");
                 refreshGameObjects();
             }
         }
@@ -3431,7 +3431,7 @@ function initGame() {
     
     // Imposta il loop di gioco principale
     app.ticker.add(delta => {
-        if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+        if (gameState.contextLost) return; // Salta il rendering se il contesto Ã¨ perso
         
         updateMovement(delta);
         interpolatePlayers(delta);
@@ -3449,7 +3449,7 @@ gameState.contextLost = false;
 gameState.contextLostTime = 0;
 gameState.recoveryInterval = null;
 
-// Modifica la funzione createBackground per supportare la mappa più grande
+// Modifica la funzione createBackground per supportare la mappa piÃ¹ grande
 function createBackground() {
   // Rimuovi lo sfondo esistente
   if (gameState.background) {
@@ -3469,7 +3469,7 @@ function createBackground() {
   mainBg.endFill();
   background.addChild(mainBg);
   
-  // Aggiungi una griglia per migliorare la percezione di profondità
+  // Aggiungi una griglia per migliorare la percezione di profonditÃ 
   const grid = new PIXI.Graphics();
   grid.lineStyle(1, 0x222222, 0.3);
   
@@ -3695,7 +3695,7 @@ function initGame() {
   
   // Imposta il loop di gioco principale
   app.ticker.add(delta => {
-    if (gameState.contextLost) return; // Salta il rendering se il contesto è perso
+    if (gameState.contextLost) return; // Salta il rendering se il contesto Ã¨ perso
     
     // Aggiorna movimento
     updateMovement(delta);
@@ -3726,7 +3726,7 @@ function initGame() {
     
     // Controlla collisioni con i punti energia
     gameState.energyPoints.forEach((point, index) => {
-      // Salta punti già raccolti
+      // Salta punti giÃ  raccolti
       if (!point.visible) return;
       
       // Calcola distanza tra giocatore e punto energia
@@ -3796,7 +3796,7 @@ function updateEnergyPoints(delta) {
   
   // Controlla collisioni con i punti energia
   gameState.energyPoints.forEach((point, index) => {
-    // Salta punti già raccolti
+    // Salta punti giÃ  raccolti
     if (!point.visible) return;
     
     // Calcola distanza tra giocatore e punto energia
@@ -3865,7 +3865,7 @@ function checkLevelUp(newSize) {
     }
   }
   
-  // Se il livello è cambiato
+  // Se il livello Ã¨ cambiato
   if (newLevel > gameState.level) {
     gameState.level = newLevel;
     
@@ -3875,17 +3875,17 @@ function checkLevelUp(newSize) {
     // Mostra messaggio di avanzamento
     showMessage(`Hai raggiunto il livello ${newLevel}: ${levelInfo.name}!`, 'success');
     
-    // Se il livello ha un'abilità, mostra un messaggio
+    // Se il livello ha un'abilitÃ , mostra un messaggio
     if (levelInfo.ability) {
-      showMessage(`Hai sbloccato l'abilità: ${getAbilityName(levelInfo.ability)}!`, 'info');
+      showMessage(`Hai sbloccato l'abilitÃ : ${getAbilityName(levelInfo.ability)}!`, 'info');
     }
   };
 }
 
-// Funzione per ottenere il nome dell'abilità
+// Funzione per ottenere il nome dell'abilitÃ 
 function getAbilityName(abilityKey) {
   const abilityNames = {
-    'speed': 'Velocità',
+    'speed': 'VelocitÃ ',
     'shield': 'Scudo',
     'attack': 'Attacco'
   };
@@ -3907,7 +3907,7 @@ function createParticleEffect(x, y, color, count) {
     particle.x = x;
     particle.y = y;
     
-    // Velocità e direzione casuale
+    // VelocitÃ  e direzione casuale
     const angle = Math.random() * Math.PI * 2;
     const speed = 1 + Math.random() * 3;
     particle.vx = Math.cos(angle) * speed;
@@ -3952,7 +3952,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Funzione per aggiornare la camera
 function updateCamera(delta) {
-  // Se non c'è camera o giocatore, non fare nulla
+  // Se non c'Ã¨ camera o giocatore, non fare nulla
   if (!gameState.camera || !gameState.players.has(gameState.playerId)) return;
   
   const player = gameState.players.get(gameState.playerId);
@@ -4046,7 +4046,7 @@ function updateMinimap() {
     // Aggiungi punto alla minimappa
     gameState.minimap.playersContainer.addChild(point);
     
-    // Se è il giocatore locale, aggiungi indicatore di direzione
+    // Se Ã¨ il giocatore locale, aggiungi indicatore di direzione
     if (isLocalPlayer) {
       const viewRect = new PIXI.Graphics();
       viewRect.lineStyle(1, 0x00ff00, 0.5);
@@ -4070,7 +4070,7 @@ function updateMinimap() {
   });
 }
 
-/* Rimuovo l'inizializzazione duplicata qui poiché già definita alla riga ~1600 */
+/* Rimuovo l'inizializzazione duplicata qui poichÃ© giÃ  definita alla riga ~1600 */
 // Aggiungi il predictor al gameState
 
 // Verifica e gestisce l'orientamento del dispositivo mobile
@@ -4106,7 +4106,7 @@ function handleDeviceOrientation() {
             }
             
             if (!isLandscape) {
-                orientationMessage.innerHTML = 'Per una migliore esperienza di gioco,<br>ruota il dispositivo in modalità orizzontale.';
+                orientationMessage.innerHTML = 'Per una migliore esperienza di gioco,<br>ruota il dispositivo in modalitÃ  orizzontale.';
                 orientationMessage.style.display = 'flex';
             } else {
                 orientationMessage.style.display = 'none';
@@ -4173,7 +4173,7 @@ function setupControls() {
   function handleKeyDown(e) {
     keyState[e.key.toLowerCase()] = true;
     
-    // Gestione abilità con tasti numerici
+    // Gestione abilitÃ  con tasti numerici
     if (e.key >= '1' && e.key <= '3') {
       const abilityIndex = parseInt(e.key) - 1;
       activateAbility(abilityIndex);
@@ -4198,7 +4198,7 @@ function setupControls() {
     setupKeyboardControls();
   }
   
-  // Aggiungi handler abilità
+  // Aggiungi handler abilitÃ 
   setupAbilityControls();
   
   // Funzione per pulire gli event listener quando necessario
@@ -4239,7 +4239,7 @@ function setupKeyboardControls() {
         gameState.keys.d = true;
         break;
       case '1':
-        // Attiva velocità
+        // Attiva velocitÃ 
         if (gameState.abilities && gameState.abilities.cooldowns.speed <= 0) {
           activateAbility('speed');
         }
@@ -4347,7 +4347,7 @@ function setupMobileControls() {
     // Aggiorna posizione stick
     joystick.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 50%))`;
     
-    // Calcola direzione e intensità
+    // Calcola direzione e intensitÃ 
     const dx = x - centerX;
     const dy = y - centerY;
     
@@ -4461,7 +4461,7 @@ function createJoystick(container) {
     // Aggiorna posizione stick
     stick.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 50%))`;
     
-    // Calcola direzione e intensità
+    // Calcola direzione e intensitÃ 
     const dx = x - centerX;
     const dy = y - centerY;
     const angle = Math.atan2(dy, dx);
@@ -4508,19 +4508,19 @@ function createJoystick(container) {
   joystick.addEventListener('touchcancel', resetJoystick);
 }
 
-// Funzione per attivare le abilità
+// Funzione per attivare le abilitÃ 
 function activateAbility(index) {
   const abilities = ['speed', 'shield', 'attack'];
   const abilityName = abilities[index];
   
   if (abilityName && gameState.abilities && gameState.abilities.cooldowns) {
-    // Attiva l'abilità se disponibile e non in cooldown
+    // Attiva l'abilitÃ  se disponibile e non in cooldown
     if (gameState.abilities.cooldowns[abilityName] <= 0) {
-      console.log(`Attivazione abilità: ${abilityName}`);
-      // Logica di attivazione specifica per ogni abilità
+      console.log(`Attivazione abilitÃ : ${abilityName}`);
+      // Logica di attivazione specifica per ogni abilitÃ 
       switch(abilityName) {
         case 'speed':
-          // Attiva velocità
+          // Attiva velocitÃ 
           gameState.abilities.active.speed = true;
           gameState.abilities.cooldowns.speed = 10; // 10 secondi di cooldown
           setTimeout(() => {
@@ -4545,7 +4545,7 @@ function activateAbility(index) {
   };
 }
 
-// Crea pulsanti abilità per dispositivi mobili
+// Crea pulsanti abilitÃ  per dispositivi mobili
 function createAbilityButtons(container) {
   const abilitiesContainer = document.createElement('div');
   abilitiesContainer.style.position = 'absolute';
@@ -4554,10 +4554,10 @@ function createAbilityButtons(container) {
   abilitiesContainer.style.display = 'flex';
   abilitiesContainer.style.gap = '10px';
   
-  // Abilità disponibili
+  // AbilitÃ  disponibili
   const abilities = ['speed', 'shield', 'attack'];
   
-  // Crea un pulsante per ogni abilità
+  // Crea un pulsante per ogni abilitÃ 
   abilities.forEach((ability, index) => {
     const button = document.createElement('div');
     button.id = `ability-${ability}`;
@@ -4595,13 +4595,13 @@ function createAbilityButtons(container) {
     });
   });
   
-  // Aggiungi container abilità al game container
+  // Aggiungi container abilitÃ  al game container
   document.getElementById('game-container').appendChild(abilitiesContainer);
 }
 
-// Configura controlli per abilità con tasti e pulsanti UI
+// Configura controlli per abilitÃ  con tasti e pulsanti UI
 function setupAbilityControls() {
-  // Crea pulsanti UI per abilità anche su desktop
+  // Crea pulsanti UI per abilitÃ  anche su desktop
   if (!isMobileDevice()) {
     const abilitiesUI = document.createElement('div');
     abilitiesUI.style.position = 'absolute';
@@ -4611,14 +4611,14 @@ function setupAbilityControls() {
     abilitiesUI.style.display = 'flex';
     abilitiesUI.style.gap = '10px';
     
-    // Abilità disponibili
+    // AbilitÃ  disponibili
     const abilities = [
-      { key: 'speed', name: 'Velocità', hotkey: '1' },
+      { key: 'speed', name: 'VelocitÃ ', hotkey: '1' },
       { key: 'shield', name: 'Scudo', hotkey: '2' },
       { key: 'attack', name: 'Attacco', hotkey: '3' }
     ];
     
-    // Crea un pulsante per ogni abilità
+    // Crea un pulsante per ogni abilitÃ 
     abilities.forEach((ability) => {
       const button = document.createElement('div');
       button.id = `ability-ui-${ability.key}`;
@@ -4651,7 +4651,7 @@ function setupAbilityControls() {
   };
 }
 
-// Crea pulsanti abilità per dispositivi mobili
+// Crea pulsanti abilitÃ  per dispositivi mobili
 function createAbilityButtons(container) {
   const abilitiesContainer = document.createElement('div');
   abilitiesContainer.style.position = 'absolute';
@@ -4660,10 +4660,10 @@ function createAbilityButtons(container) {
   abilitiesContainer.style.display = 'flex';
   abilitiesContainer.style.gap = '10px';
   
-  // Abilità disponibili
+  // AbilitÃ  disponibili
   const abilities = ['speed', 'shield', 'attack'];
   
-  // Crea un pulsante per ogni abilità
+  // Crea un pulsante per ogni abilitÃ 
   abilities.forEach((ability, index) => {
     const button = document.createElement('div');
     button.id = `ability-${ability}`;
@@ -4701,13 +4701,13 @@ function createAbilityButtons(container) {
     });
   });
   
-  // Aggiungi container abilità al game container
+  // Aggiungi container abilitÃ  al game container
   document.getElementById('game-container').appendChild(abilitiesContainer);
 }
 
-// Configura controlli per abilità con tasti e pulsanti UI
+// Configura controlli per abilitÃ  con tasti e pulsanti UI
 function setupAbilityControls() {
-  // Crea pulsanti UI per abilità anche su desktop
+  // Crea pulsanti UI per abilitÃ  anche su desktop
   if (!isMobileDevice()) {
     const abilitiesUI = document.createElement('div');
     abilitiesUI.style.position = 'absolute';
@@ -4717,14 +4717,14 @@ function setupAbilityControls() {
     abilitiesUI.style.display = 'flex';
     abilitiesUI.style.gap = '10px';
     
-    // Abilità disponibili
+    // AbilitÃ  disponibili
     const abilities = [
-      { key: 'speed', name: 'Velocità', hotkey: '1' },
+      { key: 'speed', name: 'VelocitÃ ', hotkey: '1' },
       { key: 'shield', name: 'Scudo', hotkey: '2' },
       { key: 'attack', name: 'Attacco', hotkey: '3' }
     ];
     
-    // Crea un pulsante per ogni abilità
+    // Crea un pulsante per ogni abilitÃ 
     abilities.forEach((ability) => {
       const button = document.createElement('div');
       button.id = `ability-ui-${ability.key}`;
@@ -4782,7 +4782,7 @@ function loadGameTextures() {
       
       loader.load();
     } else {
-      console.log('Texture già caricate');
+      console.log('Texture giÃ  caricate');
       resolve();
     }
   });
@@ -4834,7 +4834,7 @@ function createFallbackTextures() {
 // Migliorare initGame per garantire il caricamento dell'applicazione
 async function initGame() {
   try {
-    // Inizializza PixiJS se non è già inizializzato
+    // Inizializza PixiJS se non Ã¨ giÃ  inizializzato
     if (!app) {
       initPixiJS();
     }
@@ -4975,7 +4975,7 @@ function setupGameState() {
     };
   }
   
-  // Se non c'è playerID, creane uno nuovo
+  // Se non c'Ã¨ playerID, creane uno nuovo
   if (!gameState.playerId) {
     gameState.playerId = 'local_' + Math.random().toString(36).substr(2, 9);
     
@@ -5327,7 +5327,7 @@ class CameraSystem {
   
   updateAdvancedZoom(players, localPlayer) {
     if (players.length < 2) {
-      // Se c'è solo il giocatore locale, usa lo zoom semplice
+      // Se c'Ã¨ solo il giocatore locale, usa lo zoom semplice
       this.updateZoom(1, localPlayer.size);
       return;
     }
@@ -5954,7 +5954,7 @@ class ChunkManager {
 // Migliora l'inizializzazione del gioco
 async function initGame() {
   try {
-    // Inizializza PixiJS se non è già inizializzato
+    // Inizializza PixiJS se non Ã¨ giÃ  inizializzato
     if (!app) {
       await initPixiJS();
     }
@@ -6118,14 +6118,14 @@ function gameLoop(delta) {
     if (gameState.camera) {
       gameState.camera.update(delta);
       
-      // Aggiorna visibilità
+      // Aggiorna visibilitÃ 
       if (gameState.chunkManager) {
         const visibleBounds = gameState.camera.getVisibleBounds();
         gameState.chunkManager.updateVisibility(visibleBounds);
       }
     }
     
-    // Ottimizzazione: applica visibilità
+    // Ottimizzazione: applica visibilitÃ 
     optimizeVisibility();
     
     // Controlla collisioni
@@ -6160,7 +6160,7 @@ function gameLoop(delta) {
   }
 }
 
-// Optimization: applica visibilità in base a chunks
+// Optimization: applica visibilitÃ  in base a chunks
 function optimizeVisibility() {
   if (!gameState.chunkManager) return;
   
@@ -6198,7 +6198,7 @@ async function loadGameTextures() {
     try {
       console.log('Caricamento texture con Assets API...');
       
-      // Verifica se PIXI.Assets è disponibile (PixiJS 7+)
+      // Verifica se PIXI.Assets Ã¨ disponibile (PixiJS 7+)
       if (PIXI.Assets) {
         // Evita doppia inizializzazione per prevenire warning
         try {
@@ -6221,7 +6221,7 @@ async function loadGameTextures() {
             energy: '/assets/images/energy.png'
           });
           
-          // Carica bundle con gestione errore più robusta
+          // Carica bundle con gestione errore piÃ¹ robusta
           const textures = await PIXI.Assets.loadBundle('game')
             .catch(e => {
               throw new Error('Errore caricamento texture: ' + e.message);
@@ -6285,7 +6285,7 @@ function setupKeyboardControls() {
           gameState.moveRight = true;
         }
         
-        // Abilità
+        // AbilitÃ 
         if (key === '1' || key === '2' || key === '3') {
           const abilityIndex = parseInt(key) - 1;
           activateAbility(abilityIndex);
@@ -6342,7 +6342,7 @@ function setupKeyboardControls() {
 
 // ... existing code ...
 
-// Migliora createEnergyPoint per una gestione più robusta degli errori
+// Migliora createEnergyPoint per una gestione piÃ¹ robusta degli errori
 function createEnergyPoint(x, y) {
   // Ottieni la texture (o usa una grafica fallback)
   let texture;
@@ -6412,10 +6412,10 @@ function createEnergyPoint(x, y) {
 
 // ... existing code ...
 
-// Migliora l'inizializzazione del gioco con gestione errori più robusta
+// Migliora l'inizializzazione del gioco con gestione errori piÃ¹ robusta
 async function initGame() {
   try {
-    // Inizializza PixiJS se non è già inizializzato
+    // Inizializza PixiJS se non Ã¨ giÃ  inizializzato
     if (!app) {
       console.log('Inizializzazione PixiJS...');
       await initPixiJS();
@@ -6431,7 +6431,7 @@ async function initGame() {
       // Continua comunque, utilizzeremo texture generate
     }
     
-    // Verifica se anime.js è disponibile
+    // Verifica se anime.js Ã¨ disponibile
     let animeAvailable = false;
     try {
       animeAvailable = typeof anime !== 'undefined';
@@ -6522,7 +6522,7 @@ async function loadGameTextures() {
     try {
       console.log('Caricamento texture con Assets API...');
       
-      // Verifica se PIXI.Assets è disponibile (PixiJS 7+)
+      // Verifica se PIXI.Assets Ã¨ disponibile (PixiJS 7+)
       if (PIXI.Assets) {
         // Evita doppia inizializzazione per prevenire warning
         try {
@@ -6538,7 +6538,7 @@ async function loadGameTextures() {
         }
         
         try {
-          // Controlliamo se il bundle è già stato registrato
+          // Controlliamo se il bundle Ã¨ giÃ  stato registrato
           const bundleName = 'gameAssets' + Date.now(); // Nome unico per evitare conflitti
           
           console.log('Registrazione nuovo bundle:', bundleName);
@@ -6617,7 +6617,7 @@ function handleKeyDown(e) {
       if (gameState) gameState.moveRight = true;
     }
     
-    // Abilità (1-3)
+    // AbilitÃ  (1-3)
     if (key === '1' || key === '2' || key === '3' || key === 'digit1' || key === 'digit2' || key === 'digit3') {
       const abilityIndex = parseInt(key.replace('digit', '')) - 1;
       if (typeof activateAbility === 'function') {
@@ -6692,14 +6692,14 @@ class AssetManager {
   
   // Carica tutte le texture necessarie
   loadTextures() {
-    // Se è già in corso un caricamento, ritorna quella Promise
+    // Se Ã¨ giÃ  in corso un caricamento, ritorna quella Promise
     if (this.loadingPromise) return this.loadingPromise;
     
     this.loadingPromise = new Promise(async (resolve) => {
       try {
         console.log('Caricamento texture di gioco...');
         
-        // Se PIXI.Assets è disponibile (PixiJS 7+)
+        // Se PIXI.Assets Ã¨ disponibile (PixiJS 7+)
         if (PIXI.Assets) {
           try {
             // Inizializza Assets API
@@ -6724,7 +6724,7 @@ class AssetManager {
             this.textures = loadedAssets;
             console.log('Texture caricate con successo', Object.keys(this.textures));
             
-            // Compatibilità con vecchio loader
+            // CompatibilitÃ  con vecchio loader
             PIXI.Loader = PIXI.Loader || {};
             PIXI.Loader.shared = {
               resources: {
@@ -6744,7 +6744,7 @@ class AssetManager {
           }
         }
         
-        // Fallback se PIXI.Assets non è disponibile o fallisce
+        // Fallback se PIXI.Assets non Ã¨ disponibile o fallisce
         this._createFallbackTextures();
         resolve(this.textures);
       } catch (error) {
@@ -6803,7 +6803,7 @@ class AssetManager {
         speed: app.renderer.generateTexture(speedGraphics)
       };
       
-      // Compatibilità con vecchio loader
+      // CompatibilitÃ  con vecchio loader
       PIXI.Loader = PIXI.Loader || {};
       PIXI.Loader.shared = {
         resources: {
@@ -6872,10 +6872,10 @@ function createEnergyPoint(x, y) {
     sprite.anchor.set(0.5);
     sprite.x = x;
     sprite.y = y;
-    sprite.width = 30;  // Dimensione aumentata per migliorare visibilità
+    sprite.width = 30;  // Dimensione aumentata per migliorare visibilitÃ 
     sprite.height = 30;
     
-    // Aggiungi effetto pulse per migliorare visibilità
+    // Aggiungi effetto pulse per migliorare visibilitÃ 
     const pulseAnimation = () => {
       gsap.to(sprite.scale, {
         x: 1.2,
@@ -6939,7 +6939,7 @@ function createPlayer(id, x, y, size, username, isCurrentPlayer = false) {
     sprite.width = size;
     sprite.height = size;
     
-    // Se è il giocatore corrente, aggiungi un evidenziatore
+    // Se Ã¨ il giocatore corrente, aggiungi un evidenziatore
     if (isCurrentPlayer) {
       const highlight = new PIXI.Graphics();
       highlight.beginFill(0x00ff88, 0.3);
@@ -6998,7 +6998,7 @@ async function initGame() {
   try {
     console.log('Inizializzazione gioco...');
     
-    // Inizializza PixiJS se non è già inizializzato
+    // Inizializza PixiJS se non Ã¨ giÃ  inizializzato
     if (!app) {
       await initPixiJS();
     }
@@ -7051,7 +7051,7 @@ async function initGame() {
     const controls = setupControls();
     gameState.controls = controls;
     
-    // Crea debug logger se in modalità debug
+    // Crea debug logger se in modalitÃ  debug
     if (gameState.debug) {
       createDebugPanel();
     }
@@ -7070,7 +7070,9 @@ async function initGame() {
 
 // ... existing code ...
 
-// Nuova implementazione dell'EnergySystem
+// Nuova implementazione dell'EnergySystem (commentata per evitare duplicazione)
+/* RIMOSSO AUTOMATICAMENTE - EnergySystem Ã¨ giÃ  dichiarato in precedenza
+
 class EnergySystem {
   constructor(container) {
     this.container = container;
@@ -7084,7 +7086,7 @@ class EnergySystem {
   // Inizializza il sistema con un numero specificato di punti
   init(maxPoints = MAX_ENERGY_POINTS) {
     if (this.initialized) {
-      console.log('EnergySystem già inizializzato');
+      console.log('EnergySystem giÃ  inizializzato');
       return;
     }
     
@@ -7199,7 +7201,7 @@ class EnergySystem {
   // Aggiorna i punti dal server
   updateFromServer(pointsData) {
     if (!Array.isArray(pointsData)) {
-      console.error('pointsData non è un array:', pointsData);
+      console.error('pointsData non Ã¨ un array:', pointsData);
       return;
     }
     
@@ -7207,7 +7209,7 @@ class EnergySystem {
       // Mappatura degli ID dei punti dal server
       const serverPointIds = new Set(pointsData.map(p => p.id));
       
-      // Rimuovi i punti che non sono più nel server
+      // Rimuovi i punti che non sono piÃ¹ nel server
       this.points.forEach((point, id) => {
         if (!serverPointIds.has(id)) {
           this.removePoint(id);
@@ -7247,4 +7249,60 @@ class EnergySystem {
   }
 }
 
+*/
+// ... existing code ...
+
+// Aggiungi questa riga per assicurare che initGame sia disponibile globalmente
+window.initGame = async function initGame(username) {
+  try {
+    if (!username || typeof username !== 'string' || username.trim() === '') {
+      throw new Error('Nome utente non valido');
+    }
+    
+    console.log(`Inizializzazione gioco per ${username}...`);
+    
+    // ... resto del codice della funzione initGame ...
+    
+    // Nascondi schermata login e mostra il gioco
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    
+    // Carica textures
+    await loadGameTextures();
+    
+    // Inizializza il renderer
+    initPixiJS();
+    
+    // Imposta il nome del giocatore
+    playerName = username;
+    
+    // Connetti al WebSocket
+    connectWebSocket();
+    
+    // Inizializza camera
+    initCamera();
+    
+    // Inizializza sistema energia
+    initEnergySystem();
+    
+    // Aggiungi event listeners
+    setupEventListeners();
+    
+    // Inizializza controlli mobile
+    initMobileControls();
+    
+    // Gestisci orientamento dispositivo
+    handleDeviceOrientation();
+    
+    console.log('Gioco inizializzato con successo');
+    return true;
+  } catch (error) {
+    console.error('Errore critico inizializzazione gioco:', error);
+    showMessage(`Errore inizializzazione: ${error.message}`, 'error');
+    return false;
+  }
+}
+
+// Sostituisci la seconda dichiarazione di EnergySystem con questo commento
+// La classe EnergySystem Ã¨ giÃ  definita sopra alla linea 5462
 // ... existing code ...
