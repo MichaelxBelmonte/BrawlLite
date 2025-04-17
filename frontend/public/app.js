@@ -5108,21 +5108,39 @@ function connectWebSocket() {
       // Reset tentativi riconnessione
       reconnectAttempts = 0;
       
-      // Invia messaggio join
-      const joinMessage = {
-        type: 'join',
-        id: gameState.playerId,
-        name: 'Tu',
-        x: gameState.players.get(gameState.playerId).x,
-        y: gameState.players.get(gameState.playerId).y,
-        size: gameState.players.get(gameState.playerId).size,
-        color: gameState.players.get(gameState.playerId).color
-      };
-      
-      // Diagnostica
-      console.log('Invio messaggio join:', joinMessage);
-      
-      sendToServer(joinMessage);
+              // Invia messaggio join
+              const localPlayer = gameState.players.get(gameState.playerId);
+
+              // Verifica se il giocatore locale esiste prima di inviare
+              if (!localPlayer) {
+                console.warn("Giocatore locale non ancora inizializzato in onopen, attendo...");
+                // Potremmo ritardare l'invio o usare valori di default
+                // Per ora, usiamo valori di default per evitare crash
+                const joinMessage = {
+                  type: 'join',
+                  id: gameState.playerId,
+                  name: 'Tu',
+                  x: WORLD_CONFIG.width / 2, // Posizione iniziale di default
+                  y: WORLD_CONFIG.height / 2,
+                  size: INITIAL_SIZE,
+                  color: 0x00ff00 // Colore di default
+                };
+                console.log('Invio messaggio join (con valori default):', joinMessage);
+                sendToServer(joinMessage);
+              } else {
+                // Il giocatore esiste, usa i suoi dati
+                const joinMessage = {
+                  type: 'join',
+                  id: gameState.playerId,
+                  name: 'Tu', // Potremmo voler usare playerName qui se disponibile
+                  x: localPlayer.x,
+                  y: localPlayer.y,
+                  size: localPlayer.size,
+                  color: localPlayer.color || 0x00ff00 // Usa colore del giocatore o default
+                };
+                console.log('Invio messaggio join:', joinMessage);
+                sendToServer(joinMessage);
+              }
       
       // Setup ping per mantenere connessione
       if (gameState.pingInterval) {
@@ -7244,23 +7262,17 @@ window.initGame = async function initGame(username) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
     
-    // Carica textures
-    await loadGameTextures();
-    
-    // Inizializza il renderer
-    initPixiJS();
+       // Inizializza il renderer PRIMA di caricare le texture
+       initPixiJS();
+
+       // Carica textures
+       await loadGameTextures();
     
     // Imposta il nome del giocatore
     playerName = username;
     
     // Connetti al WebSocket
     connectWebSocket();
-    
-    // Inizializza camera
-    //initCamera();
-    
-    // Inizializza sistema energia
-    initEnergySystem();
     
     // Aggiungi event listeners
     setupEventListeners();
