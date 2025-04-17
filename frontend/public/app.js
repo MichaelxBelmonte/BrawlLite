@@ -7317,28 +7317,70 @@ window.initGame = async function initGame(username) {
     document.getElementById('game-container').style.display = 'block';
     
        // Inizializza il renderer PRIMA di caricare le texture
-       initPixiJS();
+       initPixiJS(); // Questa ora dovrebbe creare window.app
 
-       // Aggiungi un piccolo ritardo per dare tempo al renderer di inizializzarsi completamente
-       await new Promise(resolve => setTimeout(resolve, 100)); // Attendi 100ms
+       // Verifica se app è stato creato correttamente
+       if (!window.app) {
+           throw new Error('Applicazione PixiJS non creata correttamente da initPixiJS');
+       }
 
-       // Carica textures
-       await loadGameTextures();
-    
-    // Imposta il nome del giocatore
-    playerName = username;
-    
-    // Connetti al WebSocket
-    connectWebSocket();
-    
-    // Gestisci orientamento dispositivo
-    handleDeviceOrientation();
-    
-    console.log('Gioco inizializzato con successo');
-    return true;
-  } catch (error) {
-    console.error('Errore critico inizializzazione gioco:', error);
-    showMessage(`Errore inizializzazione: ${error.message}`, 'error');
-    return false;
-  }
-}
+       // Imposta il nome del giocatore
+       playerName = username;
+       gameState.playerId = `local_${Math.random().toString(36).substr(2, 9)}`; // Assicurati che playerId sia definito
+
+       // --- CREAZIONE GIOCATORE LOCALE PRIMA DI WEBSOCKET ---
+       try {
+           // Assumendo che createPlayerSprite esista e funzioni correttamente
+           if (typeof createPlayerSprite === 'function') {
+               const initialX = WORLD_CONFIG.width / 2;
+               const initialY = WORLD_CONFIG.height / 2;
+               const localPlayerSprite = createPlayerSprite(gameState.playerId, true, INITIAL_SIZE);
+               if (localPlayerSprite) {
+                   localPlayerSprite.x = initialX;
+                   localPlayerSprite.y = initialY;
+                   gameState.players = gameState.players || new Map(); // Inizializza la mappa se non esiste
+                   gameState.players.set(gameState.playerId, localPlayerSprite);
+                   console.log('Giocatore locale creato e aggiunto a gameState:', gameState.playerId);
+               } else {
+                   console.error('createPlayerSprite ha restituito null per il giocatore locale');
+               }
+           } else {
+               console.error('Funzione createPlayerSprite non trovata');
+               // Aggiungi un placeholder se la funzione manca
+               gameState.players = gameState.players || new Map();
+               gameState.players.set(gameState.playerId, { x: WORLD_CONFIG.width/2, y: WORLD_CONFIG.height/2, size: INITIAL_SIZE, isPlaceholder: true });
+           }
+       } catch (playerCreationError) {
+           console.error('Errore durante la creazione del giocatore locale:', playerCreationError);
+           // Aggiungi un placeholder in caso di errore
+           gameState.players = gameState.players || new Map();
+           gameState.players.set(gameState.playerId, { x: WORLD_CONFIG.width/2, y: WORLD_CONFIG.height/2, size: INITIAL_SIZE, isPlaceholder: true });
+       }
+       // ------------------------------------------------------
+
+       // Connetti al WebSocket (ora il giocatore locale dovrebbe esistere in gameState.players)
+       connectWebSocket();
+
+       // --- SPOSTA CARICAMENTO TEXTURE QUI ---
+       try {
+           // Aggiungi un piccolo ritardo aggiuntivo se necessario
+           // await new Promise(resolve => setTimeout(resolve, 50));
+           console.log('Tentativo caricamento texture DOPO initPixi e creazione giocatore...');
+           await loadGameTextures();
+           console.log('Caricamento texture completato (o fallito e fallback chiamato).');
+       } catch (textureError) {
+           console.error('Errore durante loadGameTextures:', textureError);
+           // La funzione di fallback viene già chiamata internamente da AssetManager
+       }
+       // ------------------------------------
+
+       // Gestisci orientamento dispositivo
+       handleDeviceOrientation();
+
+       console.log('Fine initGame: Gioco inizializzato con successo');
+       return true;
+
+     } catch (error) {
+       // ... (Blocco catch esistente) ...
+     }
+};
