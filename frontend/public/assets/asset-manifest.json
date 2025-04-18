@@ -5,7 +5,7 @@
       "assets": [
         {
           "name": "player",
-          "src": "/assets/images/player.png",
+          "src": "./assets/images/player.png",
           "fallback": {
             "type": "circle",
             "color": "0x00ff88",
@@ -14,7 +14,7 @@
         },
         {
           "name": "energy",
-          "src": "/assets/images/energy.png",
+          "src": "./assets/images/energy.png",
           "fallback": {
             "type": "circle",
             "color": "0x00ffff",
@@ -28,11 +28,23 @@
       "assets": [
         {
           "name": "button",
-          "src": "/assets/images/button.png"
+          "src": "./assets/images/button.png",
+          "fallback": {
+            "type": "rect",
+            "color": "0x3366ff",
+            "width": 200,
+            "height": 60
+          }
         },
         {
           "name": "background",
-          "src": "/assets/images/background.jpg"
+          "src": "./assets/images/background.jpg",
+          "fallback": {
+            "type": "rect",
+            "color": "0x001133",
+            "width": 1024,
+            "height": 768
+          }
         }
       ]
     },
@@ -41,8 +53,14 @@
       "assets": [
         {
           "name": "explosion",
-          "src": "/assets/images/explosion.png",
+          "src": "./assets/images/explosion.png",
           "type": "spritesheet",
+          "fallback": {
+            "type": "rect",
+            "color": "0xff3300",
+            "width": 256,
+            "height": 128
+          },
           "data": {
             "frames": 8,
             "rows": 2,
@@ -51,7 +69,12 @@
         },
         {
           "name": "glow",
-          "src": "/assets/images/glow.png"
+          "src": "./assets/images/glow.png",
+          "fallback": {
+            "type": "circle",
+            "color": "0xffffff",
+            "radius": 64
+          }
         }
       ]
     }
