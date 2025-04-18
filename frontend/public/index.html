@@ -3,17 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Brawl Legends</title>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>BrawlLite - Multiplayer Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.2.4/dist/pixi.min.js"></script>
     <script src="https://unpkg.com/msgpack5@6.0.1/dist/msgpack5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <style>
+        /* Reset e stili di base */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #061639;
+            font-family: 'Poppins', sans-serif;
+            color: white;
+        }
+        
+        /* Stili login screen */
+        #login-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #061639 0%, #0a1f4d 100%);
+            z-index: 100;
+        }
+        
+        .logo {
+            margin-bottom: 40px;
+            font-size: 48px;
+            font-weight: 700;
+            color: #00ff88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+        
+        .login-form {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        
+        .form-title {
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 24px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .input-group input:focus {
+            background-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.5);
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background-color: #00ff88;
+            color: #061639;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background-color: #00cc6a;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Stili game container */
+        #game-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        /* Stili UI di gioco */
+        .game-ui {
+            position: absolute;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+        
+        .score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        
+        .controls-help {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+        
+        /* Stili per dispositivi mobili */
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 36px;
+                margin-bottom: 30px;
+            }
+            
+            .login-form {
+                padding: 20px;
+            }
         }
         
         body {
@@ -348,90 +497,48 @@
     </style>
 </head>
 <body>
+    <!-- Schermata di login -->
     <div id="login-screen">
-        <div class="login-box">
-            <h1>Brawl Legends</h1>
-            <p>Diventa la leggenda più grande nello spazio!</p>
-            <input type="text" id="username-input" placeholder="Inserisci il tuo nome" maxlength="15">
-            <button id="play-button">Gioca!</button>
-        </div>
+        <div class="logo">BrawlLite</div>
+        <form id="login-form" class="login-form">
+            <h2 class="form-title">Entra nel Gioco</h2>
+            <div class="input-group">
+                <label for="username-input">Nome Giocatore</label>
+                <input type="text" id="username-input" placeholder="Inserisci il tuo nome" maxlength="20" required>
+            </div>
+            <button type="submit">Gioca Ora</button>
+        </form>
     </div>
-
-    <div id="game-container" style="display: none;">
-        <canvas id="game-canvas"></canvas>
-        <div id="player-info">
-            <div class="player-stats">
-                <div id="player-level">Livello: 1</div>
-                <div id="player-size">Dimensione: 30</div>
-                <div id="player-score">Punteggio: 0</div>
-            </div>
-            <div id="energy-bar-container">
-                <div id="energy-bar"></div>
-                <div id="energy-text">0/100</div>
-            </div>
-        </div>
-        
-        <div id="abilities-container">
-            <div class="ability-slot" id="ability-speed">
-                <div class="ability-icon">S</div>
-                <div class="ability-name">Scatto Turbo</div>
-                <div class="ability-status">Bloccato Liv.2</div>
-                <div class="cooldown-overlay" style="height: 0%;"></div>
-            </div>
-            <div class="ability-slot" id="ability-shield">
-                <div class="ability-icon">P</div>
-                <div class="ability-name">Scudo Energetico</div>
-                <div class="ability-status">Bloccato Liv.3</div>
-                <div class="cooldown-overlay" style="height: 0%;"></div>
-            </div>
-            <div class="ability-slot" id="ability-attack">
-                <div class="ability-icon">A</div>
-                <div class="ability-name">Raggio Letale</div>
-                <div class="ability-status">Bloccato Liv.4</div>
-                <div class="cooldown-overlay" style="height: 0%;"></div>
-            </div>
-        </div>
-        
-        <div id="notifications-container"></div>
-        <div id="leaderboard-container">
-            <h3>Classifica</h3>
-            <div id="leaderboard-list"></div>
-        </div>
-    </div>
-
-    <div class="message-container" id="message-container"></div>
     
-    <div class="level-indicator" id="level-indicator">
-        <div id="level-text">Livello 1: Novizio</div>
-        <div class="abilities" id="abilities-container"></div>
+    <!-- Container del gioco -->
+    <div id="game-container"></div>
+    
+    <!-- UI di gioco -->
+    <div class="game-ui">
+        <div class="score-display">
+            Punteggio: <span id="score-value">0</span>
+        </div>
+        <div class="controls-help">
+            WASD o Frecce = Movimento | Space = Abilità
+        </div>
     </div>
-
-    <div id="fps-counter">FPS: 60</div>
-
+    
+    <!-- Librerie esterne -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    
+    <!-- Architettura modulare -->
+    <script src="js/core/asset-manager.js"></script>
+    <script src="js/systems/collision-system.js"></script>
+    <script src="js/core/game-engine.js"></script>
+    
+    <!-- Punto di ingresso principale -->
+    <script src="js/main.js"></script>
+    
+    <!-- Compatibilità con il vecchio codice -->
     <script src="app.js"></script>
-    <script>
-        document.getElementById('play-button').addEventListener('click', () => {
-            const username = document.getElementById('username-input').value.trim();
-            if (username) {
-                if (typeof initGame === 'function') {
-                    initGame(username);
-                } else {
-                    alert('Errore: Il gioco non è stato caricato correttamente. Ricarica la pagina o controlla la console per errori.');
-                    console.error('La funzione initGame non è definita. Verificare app.js');
-                }
-            } else {
-                alert('Per favore inserisci un nome');
-            }
-        });
-        
-        document.getElementById('username-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('play-button').click();
-            }
-        });
-    </script>
-
-    <!-- Strumenti di debug -->
+    
+    <!-- Script per il debug -->
     <script src="debug-tools.js"></script>
 </body>
 </html> 

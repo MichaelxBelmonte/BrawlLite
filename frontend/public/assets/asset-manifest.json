@@ -1,0 +1,60 @@
+{
+  "bundles": [
+    {
+      "name": "game-core",
+      "assets": [
+        {
+          "name": "player",
+          "src": "/assets/images/player.png",
+          "fallback": {
+            "type": "circle",
+            "color": "0x00ff88",
+            "radius": 15
+          }
+        },
+        {
+          "name": "energy",
+          "src": "/assets/images/energy.png",
+          "fallback": {
+            "type": "circle",
+            "color": "0x00ffff",
+            "radius": 7.5
+          }
+        }
+      ]
+    },
+    {
+      "name": "ui",
+      "assets": [
+        {
+          "name": "button",
+          "src": "/assets/images/button.png"
+        },
+        {
+          "name": "background",
+          "src": "/assets/images/background.jpg"
+        }
+      ]
+    },
+    {
+      "name": "effects",
+      "assets": [
+        {
+          "name": "explosion",
+          "src": "/assets/images/explosion.png",
+          "type": "spritesheet",
+          "data": {
+            "frames": 8,
+            "rows": 2,
+            "columns": 4
+          }
+        },
+        {
+          "name": "glow",
+          "src": "/assets/images/glow.png"
+        }
+      ]
+    }
+  ],
+  "version": "1.0.0"
+} 
